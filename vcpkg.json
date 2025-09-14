@@ -1,0 +1,10 @@
+{
+    "name": "quickproto",
+    "version-string": "0.1.0",
+    "maintainers": "Terens Tare",
+    "description": "A programming language written in C++20 with a Sea-of-Nodes compiler backend.",
+    "license": "MIT",
+    "dependencies": [
+        "entt"
+    ]
+}

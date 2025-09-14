@@ -5,13 +5,19 @@
 #include <charconv>
 
 #include "builder.hpp"
-#include "dce.hpp"
 #include "scanner.hpp"
+
+#include "pass/pass_registry.hpp"
 
 // TODO:
 // - variable mapping should be block-specific
 // - drop recursion from expr and stmt rules
-// - apparently you don't need `Store` nodes most of the time; only one per variable (the last store that happens)
+// - apparently you don't need `Store` nodes most of the time; you only need them for nodes where it has an effect on
+// ^ (which is most of the time just class/global variables; for pointer function params you can just change the variable value from the calling function)
+// ^ but you still need to take care of loads of non-const variables (eg. `a = 10; b += a; a = 20`)
+// - implement codegen for comparison (<, <=, ==, !=, >, >=)
+// - structured logging
+// ^ type-erased logging destination output (stdout, json file, etc...)
 
 enum class parse_prec : uint8_t
 {
@@ -41,10 +47,10 @@ inline static std::unordered_map<token_kind, parse_prec, std::identity> const pr
     {token_kind::Slash, parse_prec::Factor},
 };
 
-constexpr op op_node(token_kind kind) noexcept
+constexpr node_op op_node(token_kind kind) noexcept
 {
     using enum token_kind;
-    using enum op;
+    using enum node_op;
 
     switch (kind)
     {
@@ -76,8 +82,8 @@ struct parser final
 {
     // expr
 
-    inline node *primary() noexcept;
-    inline node *expr(parse_prec prec = parse_prec::None) noexcept;
+    inline entt::entity primary() noexcept;
+    inline entt::entity expr(parse_prec prec = parse_prec::None) noexcept;
 
     // stmt
 
@@ -89,6 +95,15 @@ struct parser final
     // expr post_op ';'
     // post_op ::= '++' | '--'
     inline void post_op(std::span<token const> ids) noexcept;
+
+    // 'if' expr block ('else' ( if_stmt | block ))?
+    inline void if_stmt() noexcept;
+    // 'for' expr block
+    inline void for_stmt() noexcept;
+    // break_stmt | continue_stmt
+    //  break_stmt    ::= 'break'  <ident>? ';'
+    //  continue_stmt ::= 'continue' <ident>? ';'
+    inline void control_flow(token_kind which) noexcept;
     // 'return' expr,* ';'
     inline void return_stmt() noexcept;
     // { stmt* }
@@ -96,30 +111,42 @@ struct parser final
     // local_decl | comp_assign | post_op
     inline void simple_stmt() noexcept;
 
-    // block | return_stmt | simple_stmt
+    // block
+    // | if_stmt
+    // | for_stmt
+    // | return_stmt
+    // | break_stmt
+    // | continue_stmt
+    // | simple_stmt
     inline void stmt() noexcept;
 
     // decl
 
     // 'func' <ident> '(' ')' block
     inline void func_decl() noexcept;
-    // func_decl
+    // func_decl | type_decl
     inline void decl() noexcept { func_decl(); }
     // decl*
     inline void prog() noexcept;
+
+    // helpers
+    // <ident> <ident> (name type)
+    inline void param_decl() noexcept;
 
     inline token eat(token_kind kind) noexcept;
     inline token eat(std::span<token_kind const> kinds) noexcept;
 
     scanner scan;
     builder bld;
-    std::unordered_map<std::string_view, node *> vars;  // TODO: also account for local variables; can this be a function-local variable?
-    std::unordered_map<std::string_view, node *> funcs; // (name -> mem_state) mapping
-    node *mem_state;                                    // TODO: this should be per function
-    int64_t next_memory_slot = 0;                       // for variables
+    pass_registry passes{.bld = bld};
+
+    std::unordered_map<std::string_view, entt::entity> vars;  // TODO: also account for local variables; can this be a function-local variable?
+    std::unordered_map<std::string_view, entt::entity> funcs; // (name -> mem_state) mapping
+    entt::entity mem_state;                                   // TODO: this should be per function
+    int64_t next_memory_slot = 0;                             // for variables
 };
 
-inline node *parser::primary() noexcept
+inline entt::entity parser::primary() noexcept
 {
     using enum token_kind;
 
@@ -144,26 +171,26 @@ inline node *parser::primary() noexcept
 
         int64_t val{};
         std::from_chars(txt.data(), txt.data() + txt.size(), val);
-        return bld.makeval(op::Const, type::IntConst, {.i64 = val});
+        return bld.makeval(mem_state, node_op::Const, new int_const{val});
     }
 
     // TODO: don't use integer type here anymore
     case KwFalse:
-        return bld.makeval(op::Const, type::IntConst, {.i64 = false});
+        return bld.makeval(mem_state, node_op::Const, new int_const{false});
     case KwTrue:
-        return bld.makeval(op::Const, type::IntConst, {.i64 = true});
+        return bld.makeval(mem_state, node_op::Const, new int_const{true});
 
     case KwNil:
-        return bld.makeval(op::Const, type::IntConst, {.i64 = INT64_MIN});
+        return bld.makeval(mem_state, node_op::Const, new int_const{0});
 
     case Ident:
     {
         auto const name = scan.lexeme(tok);
         // TODO: recheck this after figuring out addressing
         // TODO: figure out the type of the node
-        auto const addr = bld.makeval(op::Addr, type::IntBottom, {.i64 = 0});
+        // auto const addr = bld.makeval(mem_state, op::Addr, int_bot::self(), {.i64 = 0});
 
-        return bld.make(op::Load, addr, vars[name]);
+        return vars[name];
     }
 
     case LeftParen:
@@ -176,27 +203,27 @@ inline node *parser::primary() noexcept
 
     case Bang:
     {
-        auto ret = expr();
-        return bld.make(op::UnaryNot, ret);
-        // TODO: peephole this
+        auto sub = expr();
+        entt::entity inputs[]{sub};
+        return bld.make(node_op::UnaryNot, inputs);
     }
 
     case Minus:
     {
         auto sub = expr();
-        auto ret = bld.make(op::UnaryNeg, sub);
-        return bld.peephole(ret);
+        entt::entity inputs[]{sub};
+        return bld.make(node_op::UnaryNeg, inputs);
     }
 
-    // TODO: unreachable
     default:
-        return nullptr;
+        std::unreachable();
+        return entt::null;
     }
 }
 
-inline node *parser::expr(parse_prec prec) noexcept
+inline entt::entity parser::expr(parse_prec prec) noexcept
 {
-    auto lhs = primary();
+    auto lhs = passes.run(primary());
 
     while (scan.peek.kind != token_kind::Eof)
     {
@@ -208,10 +235,12 @@ inline node *parser::expr(parse_prec prec) noexcept
 
         auto op = scan.next().kind;
         // TODO: if right-associative op, increase precedence of rprec by 1
+        // TODO: do you even have right-associative operators?
         auto rhs = expr(rprec);
 
-        lhs = bld.make(op_node(op), lhs, rhs);
-        lhs = bld.peephole(lhs);
+        entt::entity inputs[]{lhs, rhs};
+        lhs = bld.make(op_node(op), inputs);
+        lhs = passes.run(lhs);
     }
 
     return lhs;
@@ -222,21 +251,24 @@ inline void parser::local_decl(std::span<token const> ids) noexcept
     // parsing
 
     // TODO: eat this outside of this function
-    eat(token_kind::Walrus);
+    eat(token_kind::Walrus); // :=
 
     // TODO: parse an expression list instead
     auto rhs = expr();
 
-    eat(token_kind::Semicolon);
+    eat(token_kind::Semicolon); // ;
 
     // codegen
 
     // TODO: declare all variables, not just the first one
     // TODO: figure out the type of the node
-    auto lhs = bld.make(op::Proj, mem_state);
-    lhs->value = {.i64 = next_memory_slot++};
+    // auto lhs = bld.make(op::Proj, mem_state);
+    // lhs->value = {.i64 = next_memory_slot++};
 
-    vars[scan.lexeme(ids[0])] = bld.make(op::Store, lhs, rhs, mem_state);
+    // auto out = bld.make(op::Store, lhs, rhs);
+    vars[scan.lexeme(ids[0])] = rhs;
+    // TODO: is this the correct node?
+    // bld.effects[rhs->id] = mem_state;
 }
 
 inline void parser::comp_assign(std::span<token const> ids) noexcept
@@ -261,23 +293,23 @@ inline void parser::comp_assign(std::span<token const> ids) noexcept
 
     // codegen
     auto const node_op = optok == token_kind::PlusEqual
-                             ? op::Add
+                             ? node_op::Add
                          : optok == token_kind::MinusEqual
-                             ? op::Sub
+                             ? node_op::Sub
                          : optok == token_kind::StarEqual
-                             ? op::Mul
-                             : op::Div;
+                             ? node_op::Mul
+                             : node_op::Div;
 
-    // TODO: do NOT use the lexeme here, use the address of the result
+    // TODO: do NOT use the lexeme here, use the address of lhs (eg. `a.b` is not a single token)
     auto const name = scan.lexeme(ids[0]);
 
     // TODO: use an actual address here
     // TODO: figure out the type of the node
-    auto const res = bld.makeval(op::Addr, type::IntBottom, {.i64 = 0});
+    // auto const res = bld.makeval(op::Addr, int_bot::self(), {.i64 = 0});
 
-    auto const ld = bld.make(op::Load, res, vars[name]);
-    auto const opnode = bld.make(node_op, ld, rhs);
-    vars[name] = bld.make(op::Store, res, opnode, vars[name]); // TODO: does this depend on `vars[name]` or on the load?
+    auto opnode = bld.make(node_op, vars[name], rhs);
+    opnode = passes.run(opnode);
+    vars[name] = opnode; // TODO: does this depend on `vars[name]` or on the load?
 }
 
 inline void parser::post_op(std::span<token const> ids) noexcept
@@ -295,22 +327,83 @@ inline void parser::post_op(std::span<token const> ids) noexcept
 
     // codegen
     auto const node_op = optok == token_kind::PlusPlus
-                             ? op::Add
-                             : op::Sub;
+                             ? node_op::Add
+                             : node_op::Sub;
 
     // TODO: do NOT use the lexeme here, use the address of the result
     auto const name = scan.lexeme(ids[0]);
+
     // TODO: use an actual address here
     // TODO: figure out the type of the node
-    auto const res = bld.makeval(op::Addr, type::IntBottom, {.i64 = 0});
+    // auto const res = bld.makeval(mem_state, op::Addr, int_bot::self());
 
-    auto const ld = bld.make(op::Load, res, vars[name]);
-    auto const opnode = bld.make(
+    auto opnode = bld.make(
         node_op,
-        ld,
-        bld.makeval(op::Const, type::IntConst, {.i64 = 1}) //
+        vars[name],
+        bld.makeval(mem_state, node_op::Const, new int_const{1}) //
     );
-    vars[name] = bld.make(op::Store, res, opnode, vars[name]);
+    opnode = passes.run(opnode);
+
+    vars[name] = opnode;
+}
+
+inline void parser::if_stmt() noexcept
+{
+    // parsing
+    eat(token_kind::KwIf); // 'if'
+    auto cond = expr();    // expr
+
+    // TODO: is this mem_state or $ctrl?
+    auto if_node = bld.make(node_op::If, mem_state, cond);
+
+    auto then = bld.make(node_op::Proj, if_node);
+    // then->value = {.i64 = 0};
+
+    // TODO: copy the variables on scope and set the copy's `$ctrl` to `then` or `else_` depending on the branch taken, then pop back when done
+    // ^ then also merge the two scopes into the main scope
+    block(); // block
+
+    if (scan.peek.kind == token_kind::KwElse)
+    {
+        auto else_ = bld.make(node_op::Proj, if_node);
+        // else_->value = {.i64 = 1};
+
+        scan.next(); // 'else'
+        (scan.peek.kind == token_kind::KwIf)
+            ? if_stmt() // if_stmt
+            : block();  // | block
+    }
+
+    // codegen
+}
+
+inline void parser::for_stmt() noexcept
+{
+    // parsing
+    eat(token_kind::KwFor); // 'for'
+
+    auto cond = expr();
+    block();
+
+    // codegen
+
+    // TODO: implement
+}
+
+inline void parser::control_flow(token_kind which) noexcept
+{
+    // parsing
+
+    if (scan.peek.kind != token_kind::Semicolon)
+    {
+        auto where = eat(token_kind::Ident); // <ident>?
+    }
+
+    eat(token_kind::Semicolon); // ;
+
+    // codegen
+
+    // TODO: implement
 }
 
 inline void parser::return_stmt() noexcept
@@ -318,7 +411,8 @@ inline void parser::return_stmt() noexcept
     // parsing
     eat(token_kind::KwReturn); // 'return'
 
-    std::vector<node *> outs;
+    std::vector<entt::entity> outs;
+
     if (scan.peek.kind != token_kind::Semicolon)
     {
         outs.push_back(expr()); // expr
@@ -333,7 +427,9 @@ inline void parser::return_stmt() noexcept
     eat(token_kind::Semicolon); // ;
 
     // codegen
-    bld.make(op::Return, outs);
+    auto out = bld.make(node_op::Return, outs);
+    // TODO: recheck this
+    (void)bld.reg.get_or_emplace<effect>(out, mem_state);
 }
 
 inline void parser::block() noexcept
@@ -394,6 +490,19 @@ inline void parser::stmt() noexcept
         return_stmt();
         break;
 
+    case token_kind::KwIf:
+        if_stmt();
+        break;
+
+    case token_kind::KwFor:
+        for_stmt();
+        break;
+
+    case token_kind::KwBreak:
+    case token_kind::KwContinue:
+        control_flow(scan.next().kind);
+        break;
+
     default:
         simple_stmt();
         break;
@@ -404,32 +513,71 @@ inline void parser::stmt() noexcept
 
 inline void parser::func_decl() noexcept
 {
+    // some setup codegen before parsing
+    // NOTE: this needs to be here because parameters depend on `mem_state`
+    // TODO: rollback this in case of errors during parsing
+    mem_state = bld.make(node_op::Start);
+    next_memory_slot = 0;
+
     // parsing
 
     eat(token_kind::KwFunc);               // 'func'
     auto nametok = eat(token_kind::Ident); // ident
     eat(token_kind::LeftParen);            // '('
+
+    // param_decl,*
+    if (scan.peek.kind != token_kind::RightParen)
+    {
+        param_decl(); // param_decl
+
+        // (',' param_decl)*
+        while (scan.peek.kind == token_kind::Comma)
+        {
+            scan.next();  // ,
+            param_decl(); // param_decl
+        }
+    }
+
     // TODO: parse parameters
     eat(token_kind::RightParen); // ')'
 
     auto name = scan.lexeme(nametok);
     ensure(!funcs.contains(name), "Function already defined");
 
-    // some setup codegen before calling `block`
-    mem_state = bld.make(op::Start);
-    // TODO: ^ add parameters here
     funcs.insert({name, mem_state});
 
     block(); // block
 
     // TODO: for each function, this will run over all the program which is sub-optimal; so prune starting from the return instead
+    // TODO: enable back
+    // lemma: alive_nodes(func) = (alive_nodes(stmt) + ...) for stmt in func.body
+    // ^ ie. if a node is not reachable after a statement is added (except the main node of the stmt), it is not reachable after other statements are added
+    // ^ (maybe) you can simply mark the unreachable nodes with time and delete them when a function is fully parsed
     prune_dead_code(bld);
 }
 
 inline void parser::prog() noexcept
 {
     while (scan.peek.kind != token_kind::Eof)
+    {
         decl(); // decl*
+    }
+}
+
+// helper rules
+
+inline void parser::param_decl() noexcept
+{
+    auto nametok = eat(token_kind::Ident); // name
+    auto type = eat(token_kind::Ident);    // type
+
+    // TODO: recheck this
+    auto node = bld.makeval(mem_state, node_op::Proj, new int_const{next_memory_slot++});
+    // TODO: remove this once `makeval` sets effects
+    (void)bld.reg.get_or_emplace<effect>(node, mem_state);
+
+    auto name = scan.lexeme(nametok);
+    vars[name] = node;
 }
 
 // helpers

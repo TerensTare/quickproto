@@ -10,6 +10,13 @@
 // - use a custom typeid solution, rather than dynamic cast
 // ^ How do you represent subclassing with indices? (eg. how do you know a type is any kind of `int`?)
 // ^ but do you really need subclassing?
+// - separate value from control flow nodes
+// ^ value and control flow nodes have disjoint types, so make separate types somehow
+// - signed and unsigned integers should be separate; then you only have these types for integers
+// ^ then sized integers are for example: uint8 is `uint_range{0, 255}`
+// - maybe use a value_stack and index into it when representing types
+// - `control_flow_type`
+// - maybe handle operators using a function table, rather than letting the type handle them?
 
 struct type
 {
@@ -17,16 +24,24 @@ struct type
 
     virtual type const *meet(type const *rhs) const noexcept = 0;
 
-    // TODO: ensure derived from type
+    // TODO: T: type
     template <typename T>
     inline T const *as() const noexcept { return dynamic_cast<T const *>(this); }
 };
 
+// impossible type (unreachable code, UB, errors, etc.)
 struct top final : type
 {
+    inline static type const *self() noexcept
+    {
+        static top top;
+        return &top;
+    }
+
     inline type const *meet(type const *rhs) const noexcept { return rhs; }
 };
 
+// unknown type (runtime values, etc.)
 struct bot final : type
 {
     inline static type const *self() noexcept
@@ -40,6 +55,8 @@ struct bot final : type
 
 struct not_ctrl;
 struct int_;
+
+// Section: control flow types
 
 // reachable node
 struct ctrl final : type
@@ -69,35 +86,96 @@ struct not_ctrl final : type
     }
 };
 
-struct int_ : type
+struct value_type : type
+{
+    // binary
+    virtual value_type const *add(value_type const *rhs) const noexcept = 0;
+    virtual value_type const *sub(value_type const *rhs) const noexcept = 0;
+    virtual value_type const *mul(value_type const *rhs) const noexcept = 0;
+    virtual value_type const *div(value_type const *rhs) const noexcept = 0;
+    // unary
+    virtual value_type const *neg() const noexcept = 0;
+};
+
+// Section: int types
+
+struct int_ : value_type
 {
 };
 
 struct int_top final : int_
 {
+    inline static value_type const *self() noexcept
+    {
+        static int_top top;
+        return &top;
+    }
+
     inline type const *meet(type const *rhs) const noexcept
     {
         if (rhs->as<int_>())
             return rhs;
         // TODO: handle non-int meets
     }
+
+    // impl value_type
+
+    // TODO: fail if type is NOT `int_`
+    // TODO: implement
+    inline value_type const *add(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_>())
+            return rhs;
+    }
+
+    inline value_type const *sub(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_>())
+            return rhs;
+    }
+
+    inline value_type const *mul(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_>())
+            return rhs;
+    }
+
+    inline value_type const *div(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_>())
+            return rhs;
+    }
+
+    inline value_type const *neg() const noexcept { return this; }
 };
 
 struct int_bot final : int_
 {
-    inline static type const *self() noexcept
+    inline static value_type const *self() noexcept
     {
         static int_bot bot;
         return &bot;
     }
 
+    // impl type
     inline type const *meet(type const *rhs) const noexcept { return this; }
+
+    // impl value_type
+
+    // TODO: fail if type is NOT `int_`
+    inline value_type const *add(value_type const *rhs) const noexcept { return this; }
+    inline value_type const *sub(value_type const *rhs) const noexcept { return this; }
+    inline value_type const *mul(value_type const *rhs) const noexcept { return this; }
+    inline value_type const *div(value_type const *rhs) const noexcept { return this; }
+
+    inline value_type const *neg() const noexcept { return this; }
 };
 
 struct int_const final : int_
 {
     explicit int_const(int64_t n) noexcept : n{n} {}
 
+    // impl type
     inline type const *meet(type const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
@@ -108,8 +186,104 @@ struct int_const final : int_
             return this;
     }
 
+    // impl value_type
+    inline value_type const *add(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_bot>())
+            return rhs;
+        else if (auto ptr = rhs->as<int_const>(); ptr)
+            return new int_const{n + ptr->n};
+        else if (rhs->as<int_top>())
+            return this;
+    }
+
+    inline value_type const *sub(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_bot>())
+            return rhs;
+        else if (auto ptr = rhs->as<int_const>(); ptr)
+            return new int_const{n - ptr->n};
+        else if (rhs->as<int_top>())
+            return this;
+    }
+
+    inline value_type const *mul(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_bot>())
+            return rhs;
+        else if (auto ptr = rhs->as<int_const>(); ptr)
+            return new int_const{n * ptr->n};
+        else if (rhs->as<int_top>())
+            return this;
+    }
+
+    inline value_type const *div(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_bot>())
+            return rhs;
+        else if (auto ptr = rhs->as<int_const>(); ptr)
+            return (ptr->n == 0) ? int_top::self() : new int_const{n / ptr->n};
+        else if (rhs->as<int_top>())
+            return this;
+    }
+
+    inline value_type const *neg() const noexcept { return new int_const{-n}; }
+
     int64_t n;
 };
+
+// TODO: two or more possible ranges (eg. [-5, -3] to [3, 5])
+// TODO: lt, gt, le, ge
+struct int_range final : int_
+{
+    inline int_range(int64_t lo = INT64_MIN, int64_t hi = INT64_MAX) noexcept
+        : lo{lo}, hi{hi} {}
+
+    inline type const *meet(type const *rhs) const noexcept
+    {
+        if (auto r = rhs->as<int_const>())
+        {
+            return (lo <= r->n && r->n <= hi) ? this : int_bot::self();
+        }
+        else
+        {
+            // TODO: other alternatives
+            return int_bot::self();
+        }
+    }
+
+    int64_t lo, hi;
+};
+
+// Section: pointer types
+
+struct ptr final : type
+{
+    inline static ptr const *not_nil() noexcept
+    {
+        static ptr ty{};
+        return &ty;
+    }
+
+    inline static ptr const *nil() noexcept
+    {
+        static ptr ty{};
+        return &ty;
+    }
+
+    inline type const *meet(type const *rhs) const noexcept
+    {
+    }
+
+private:
+    explicit ptr() noexcept {}
+};
+
+struct struct_ : type
+{
+};
+
+// Section: tuple types
 
 struct tuple : type
 {

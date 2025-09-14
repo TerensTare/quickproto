@@ -37,8 +37,13 @@ enum class token_kind : uint8_t
     LessEqual,    // <=
 
     // Keywords
+    KwBreak,
+    KwContinue,
+    KwElse,
     KwFalse,
+    KwFor,
     KwFunc,
+    KwIf,
     KwNil,
     KwReturn,
     KwTrue,

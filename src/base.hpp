@@ -2,11 +2,12 @@
 #pragma once
 
 #include <print>
+#include <stacktrace>
 
 [[noreturn]]
-inline void fail(char const *msg) noexcept
+inline void fail(char const *msg, std::stacktrace st = std::stacktrace::current()) noexcept
 {
-    std::print("{}", msg);
+    std::print("{}\nStacktrace: {}", msg, st);
     __debugbreak(); // TODO: do something cross-platform
     std::exit(-1);
 }

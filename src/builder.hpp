@@ -9,163 +9,79 @@
 // ^ optimized memory layout
 // ^ allocate everything on an allocator, keep builder and graph trivial
 // - add a free-list to node allocation
-// - block_builder, not just register_builder
 // - set the type of each node, either by specifying or by deduction
 // - optimize constant stores on `peephole`
-// - prune dead nodes on `peephole`
+// - make `StartNode` hold `$ctrl; params...` as input and use `$ctrl`, `params...` as normal
+// - `Store` should be `Store(memory, proj, value)`
+// - link constants back to `mem_state` on `peephole`
+
+// component
+// Nodes having this component will be deleted by DCE
+struct dead_node final
+{
+    inline static void on_construct(entt::registry &reg, entt::entity id) noexcept
+    {
+        // "dead nodes" are infective to their children (TODO: make sure you do NOT delete shared nodes)
+        auto &&dead = reg.storage<dead_node>();
+        auto &&to_add = reg.get<node_inputs const>(id).nodes;
+        dead.insert(to_add.begin(), to_add.end());
+    }
+};
 
 struct builder final
 {
-    // TODO: can these overloads ever collide?
-    inline node *make(op op, std::span<node *> nins) noexcept;
+    // invariant: The returned entity has the following components:
+    // `node`
+    // `node_inputs`
+    // invariant: `users` and `user_counter` are updated for any entity in `nins`
+    inline entt::entity make(node_op op, std::span<entt::entity const> nins) noexcept;
 
-    template <std::same_as<node *>... Ins>
-    inline node *make(op op, Ins... ins) noexcept
+    template <std::same_as<entt::entity>... Ins>
+    inline entt::entity make(node_op op, Ins... ins) noexcept
     {
         // TODO: recheck this
-        node *nins_arr[]{nullptr, ins...}; // Add null in the beginning because C++ doesn't allow arrays of size 0
+        entt::entity nins_arr[]{entt::null, ins...}; // Add null in the beginning because C++ doesn't allow arrays of size 0
         return make(op, std::span(nins_arr + 1, sizeof...(Ins)));
     }
 
     // Add some kind of static checks to `op` here
-    inline node *makeval(op op, type type, value value) noexcept;
+    inline entt::entity makeval(entt::entity memory, node_op op, type const *type) noexcept;
 
-    inline node_id next_id() noexcept;
-
-    inline graph freeze() const noexcept;
-
-    inline node *replace(node_id oldn, node *newn) noexcept;
-    inline node *peephole(node *n) noexcept;
-
-    std::vector<node *> nodes;
-    node_id next;
-    node_map<std::vector<node *>> users;
+    // TODO: is there any node with more than 1 effect dependency?
+    entt::registry reg;
 };
 
-inline node *builder::make(op op, std::span<node *> nins) noexcept
+inline entt::entity builder::make(node_op op, std::span<entt::entity const> nins) noexcept
 {
     auto const num_ins = nins.size();
 
-    auto n = (node *)::operator new(sizeof(node) + sizeof(node *) * num_ins);
-    *n = {
-        .id = next_id(),
-        .op = op,
-        .in_size = num_ins,
-    };
+    auto const n = reg.create();
+    reg.emplace<node_op>(n, op);
+    reg.emplace<node_type>(n, bot::self());
+    reg.emplace<node_inputs>(n, std::vector(nins.begin(), nins.end()));
 
-    if (num_ins != 0)
-        std::copy_n(nins.data(), num_ins, n->inputs());
-
-    users.try_emplace(n->id);
-    nodes.push_back(n);
-
-    for (size_t i{}; i < num_ins; ++i)
+    // TODO: optimize
+    for (uint32_t i{}; auto id : nins)
     {
-        auto in = nins[i];
-        users[in->id].push_back(n);
+        reg.get_or_emplace<users>(id).entries.push_back({n, i++});
     }
 
     return n;
 }
 
-inline node *builder::makeval(op op, type type, value value) noexcept
+inline entt::entity builder::makeval(entt::entity memory, node_op op, type const *type) noexcept
 {
     auto n = make(op);
-    n->type = type;
-    n->value = value;
+    reg.get<node_type>(n).type = type;
+
+    // TODO: actually set this
+    // effects[n->id] = memory;
+
     return n;
 }
 
-inline node_id builder::next_id() noexcept
+inline void prune_dead_code(builder &bld) noexcept
 {
-    auto const ret = next;
-    next = node_id{(uint32_t)next + 1};
-    return ret;
-}
-
-inline graph builder::freeze() const noexcept
-{
-    return graph{
-        .nodes = nodes,
-    };
-}
-
-inline node *builder::replace(node_id oldn, node *newn) noexcept
-{
-    for (auto user : users[oldn])
-    {
-        auto const count = user->in_size;
-        auto inputs = user->inputs();
-
-        for (size_t i{}; i < count; ++i)
-            if (inputs[i]->id == oldn)
-            {
-                inputs[i] = newn;
-                break;
-            }
-    }
-
-    return newn;
-}
-
-inline node *builder::peephole(node *n) noexcept
-{
-    auto const newn = [&]
-    {
-        // TODO: use `meet` here instead
-        auto const ins = n->inputs();
-
-        auto const can_fold = [&]
-        {
-            switch (n->op)
-            {
-            case op::Add:
-            case op::Sub:
-            case op::Mul:
-            case op::Div:
-                // TODO: check the type instead
-                return ins[0]->op == op::Const && ins[1]->op == op::Const;
-
-            case op::UnaryNeg:
-                return ins[0]->op == op::Const;
-            }
-
-            return false;
-        }();
-
-        if (!can_fold)
-            return n;
-
-        auto const res = [&]() -> value
-        {
-            switch (n->op)
-            {
-            case op::Add:
-                return {.i64 = ins[0]->value.i64 + ins[1]->value.i64};
-
-            case op::Sub:
-                return {.i64 = ins[0]->value.i64 - ins[1]->value.i64};
-
-            case op::Mul:
-                return {.i64 = ins[0]->value.i64 * ins[1]->value.i64};
-
-            case op::Div:
-                return {.i64 = ins[0]->value.i64 / ins[1]->value.i64};
-
-            case op::UnaryNeg:
-                return {.i64 = -ins[0]->value.i64};
-            }
-
-            return value{};
-        }();
-
-        auto const oldn = n->id;
-        auto newn = makeval(op::Const, type::IntConst, res);
-
-        return replace(oldn, newn);
-    }();
-
-    // TODO: kill any nodes here
-
-    return newn;
+    auto &&to_cut = bld.reg.storage<dead_node>();
+    bld.reg.destroy(to_cut.begin(), to_cut.end());
 }

@@ -66,8 +66,13 @@ struct scanner_iter final
 };
 
 inline static std::unordered_map<std::string_view, token_kind> const keywords{
+    {"break", token_kind::KwBreak},
+    {"continue", token_kind::KwContinue},
+    {"else", token_kind::KwElse},
     {"false", token_kind::KwFalse},
+    {"for", token_kind::KwFor},
     {"func", token_kind::KwFunc},
+    {"if", token_kind::KwIf},
     {"nil", token_kind::KwNil},
     {"return", token_kind::KwReturn},
     {"true", token_kind::KwTrue},
