@@ -1,5 +1,7 @@
 
 #include <memory>
+
+#include "backends/dot.hpp"
 #include "parser.hpp"
 
 // TODO:
@@ -10,6 +12,7 @@
 // ^ because peephole only affects a node and its children
 // ^ so add overload to `builder.make` that peepholes for you
 // - option to specify name of passes to run; also presets with certain passes such as opt(1), opt(2), debug or profile
+// ^ deduce backend based on `-o <out-name>.<ext>`
 
 struct cmd_args final
 {
@@ -46,7 +49,8 @@ int main(int argc, char **argv)
     auto f = fopen(args.out_path, "w");
     ensure(f, "Cannot open output file!");
 
-    export_dot(p.bld.reg, f);
+    dot_backend dot;
+    dot.compile(f, p.bld.reg);
 
     return 0;
 }
@@ -75,9 +79,10 @@ inline cmd_args cmd_args::parse(int argc, char **argv) noexcept
             name.substr(name_start) //
         );
 
-        std::exit(0);
+        // std::exit(0);
     }
 
+    // auto in_path = "sample.qp";
     char const *in_path = argv[1];
     char const *out_path = "out.dot";
     bool opt = false;

@@ -17,6 +17,7 @@
 // - maybe use a value_stack and index into it when representing types
 // - `control_flow_type`
 // - maybe handle operators using a function table, rather than letting the type handle them?
+// - get rid of `meet` eventually; replace for specific operations
 
 struct type
 {
@@ -95,6 +96,51 @@ struct value_type : type
     virtual value_type const *div(value_type const *rhs) const noexcept = 0;
     // unary
     virtual value_type const *neg() const noexcept = 0;
+};
+
+// signals that this operator/overload is not implemented
+struct op_not_implemented_type final : value_type
+{
+    inline static value_type const *self() noexcept
+    {
+        static op_not_implemented_type ty;
+        return &ty;
+    }
+
+    inline type const *meet(type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+
+    // TODO: return a `value_error` instead
+    inline value_type const *add(value_type const *rhs) const noexcept { return self(); }
+    inline value_type const *sub(value_type const *rhs) const noexcept { return self(); }
+    inline value_type const *mul(value_type const *rhs) const noexcept { return self(); }
+    inline value_type const *div(value_type const *rhs) const noexcept { return self(); }
+
+    // unary
+
+    // TODO: return a `value_error` instead
+    inline value_type const *neg() const noexcept { return self(); }
+};
+
+struct void_type final : value_type
+{
+    inline static value_type const *self() noexcept
+    {
+        static void_type vty;
+        return &vty;
+    }
+
+    // TODO: is this correct?
+    inline type const *meet(type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+
+    // binary
+
+    inline value_type const *add(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+    inline value_type const *sub(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+    inline value_type const *mul(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+    inline value_type const *div(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+
+    // unary
+    inline value_type const *neg() const noexcept { return op_not_implemented_type::self(); }
 };
 
 // Section: int types
@@ -288,12 +334,41 @@ struct struct_ : type
 struct tuple : type
 {
 };
+
 struct tuple_top : tuple
 {
 };
-struct tuple_n : tuple
-{
-};
+
 struct tuple_bot : tuple
 {
+    inline type const *meet(type const *rhs) const noexcept
+    {
+        return this; // TODO: error on non-matching types
+    }
+};
+
+struct tuple_n : tuple
+{
+    inline tuple_n(size_t n, std::unique_ptr<type const *[]> sub) noexcept
+        : n{n}, sub(std::move(sub)) {}
+
+    inline type const *meet(type const *rhs) const noexcept
+    {
+        if (auto ptr = rhs->as<tuple_n>(); ptr && ptr->n == n)
+        {
+            // TODO: is this correct?
+            auto new_tuple = std::make_unique_for_overwrite<type const *[]>(n);
+            for (size_t i{}; i < n; ++i)
+            {
+                new_tuple[i] = sub[i]->meet(ptr->sub[i]);
+            }
+
+            return new tuple_n{n, std::move(new_tuple)};
+        }
+
+        return new tuple_bot{};
+    }
+
+    size_t n;
+    std::unique_ptr<type const *[]> sub;
 };

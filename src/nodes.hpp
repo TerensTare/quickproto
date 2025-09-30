@@ -10,9 +10,9 @@
 #include "type.hpp"
 
 // TODO:
-// - do you really need a node id inside the node?
+// - embed node type on id
 // - multi-assign + multi-declare variables
-// - store nodes by hash (hash=id, but based on node kind, etc.) - called hash-cons
+// - store nodes by hash (hash=id, but based on node kind, etc.) - called hash-cons; it also helps with constant pooling
 // - Stores are right-to-left; enforce that (maybe by just reordering `In`?)
 // - arena-allocate builder data
 // - add a control flow edge to load/store
@@ -23,8 +23,6 @@
 // - consider storing edges as inputs instead of just nodes, to model different kind of edges (memory, etc.)
 // - does MultiNode have many values or many inputs?
 // - Addr is just a `Proj` now; address this
-// - encode flow information in nodes such as `if`, etc.
-// - rewrite nodes as types; type pun into the common `node *` type and pick whether to use destroying delete or not
 // - when visualizing, show the type of the node with `tooltip=\"\"`
 // - should loads and stores have type information in them?
 // ^ eg. `Load(from=mem_state, proj=0, as=int64_bot)` (if the value is known, the type will be lifted to have more info automatically)
@@ -36,8 +34,11 @@
 // - also embed the op kind in each entity's id for fast checks in `peephole`
 // - (maybe): split nodes depending on type: value nodes, control flow nodes, etc...; this way you can specify more clearly the edges of nodes
 // - local variables do not need `Load`/`Store`, but globals/members do
+// - there are two types of `Proj` nodes: `Proj` on a value and `Proj` on control flow
+// ^ `Proj`s on values have input links and `Proj`s on control flow have `effect` links
 
 // DONE:
+// - [x] encode flow information in nodes such as `if`, etc.
 // - [x] nodes need a custom deleter (cannot just do `delete node`)
 // - [x] store special edges separately in a map of linked-list mix
 // - [x] `Start` node to be specified on `load`/`store` nodes to avoid reordering
@@ -101,6 +102,7 @@ struct users final
 
 // component
 // TODO: inline small-size list depending on node type
+// TODO: nodes have a fixed number of inputs (except maybe call when optimized?) so you can use a `dynamic_array<T>` here probably with a small buffer for math nodes
 struct node_inputs final
 {
     // TODO: use something better
@@ -126,80 +128,3 @@ struct std::formatter<entt::entity, char> final
         return std::format_to(ctx.out(), "{}", just_id);
     }
 };
-
-inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) noexcept -> decltype(auto)
-{
-    std::format_to(out, "n{} ", id);
-
-#define named_node(label) std::format_to(out, "[label=\"" label "\"]")
-#define circle_node(label) std::format_to(out, "[label=\"" label "\", shape=circle]")
-
-    auto &&[op, type] = reg.get<node_op const, node_type const>(id);
-    switch (op)
-    {
-    case node_op::Load:
-        return named_node("Load");
-    case node_op::Store:
-        return named_node("Store");
-    case node_op::Start:
-        return named_node("State");
-    case node_op::Return:
-        return named_node("Return");
-        // HACK: use a separate function to print the type
-    case node_op::Proj:
-        return std::format_to(out, "[label=\"Proj({})\"]", type.type->as<int_const>()->n);
-    case node_op::Const:
-        return std::format_to(out, "[label=\"{}\"]", type.type->as<int_const>()->n);
-    case node_op::Addr:
-        return std::format_to(out, "[label=\"Addr({})\"]", type.type->as<int_const>()->n);
-    case node_op::UnaryNeg:
-        return circle_node("-");
-    case node_op::UnaryNot:
-        return circle_node("!");
-    case node_op::Add:
-        return circle_node("+");
-    case node_op::Sub:
-        return circle_node("-");
-    case node_op::Mul:
-        return circle_node("*");
-    case node_op::Div:
-        return circle_node("/");
-    case node_op::CmpEq:
-        return circle_node("==");
-    case node_op::CmpLe:
-        return circle_node("<=");
-
-    default:
-        return named_node("<Unknown>");
-    }
-
-#undef circle_node
-#undef named_node
-}
-
-inline void export_dot(entt::registry const &reg, FILE *f) noexcept
-{
-    std::print(f, "digraph G {{\n"
-                  "  rankdir=BT;\n"
-                  "  node [shape=box];\n");
-
-    for (auto [id, ins] : reg.view<node_inputs const>().each())
-    {
-        // TODO: find something more elegant and efficient
-        {
-            std::string out;
-            auto iter = std::back_inserter(out);
-            print_node(iter, reg, id);
-            std::print(f, "  {};\n", out);
-        }
-
-        for (size_t i{}; auto &&in : ins.nodes)
-            std::print(f, "  n{} -> n{} [label=\"in#{}\"];\n",
-                       id, in, i++);
-    }
-
-    for (auto [dep, in] : reg.storage<effect>()->each())
-        std::print(f, "  n{} -> n{} [color=\"red\"];\n", dep, in.target);
-
-    std::print(f, "}}");
-}
