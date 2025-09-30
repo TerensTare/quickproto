@@ -181,7 +181,7 @@ struct parser final
 
     // decl
 
-    // 'func' <ident> '(' param_decl,*, ')' block
+    // 'func' <ident> '(' param_decl,*, ')' type? block
     inline void func_decl() noexcept;
     // func_decl | type_decl
     inline void decl() noexcept;
@@ -202,6 +202,9 @@ private:
     // <ident> <ident> (name type)
     // i is the index of the parameter in the function declaration (used by the Proj node emitted for the parameter)
     inline value_type const *param_decl(int64_t i) noexcept;
+
+    // section types
+    inline value_type const *type() noexcept;
 
     inline void merge(scope &parent, scope const &lhs, scope const &rhs) noexcept;
 
@@ -657,6 +660,7 @@ inline void parser::func_decl() noexcept
 
     // TODO: environment pointer should be restored to before parameters, not after
     // ^ also declare the function name before params; the environment should contain it
+    // TODO: parse the parameters + return in a separate function, return the node id
 
     // param_decl,*
     int64_t param_i = 0;
@@ -680,16 +684,19 @@ inline void parser::func_decl() noexcept
     auto param_types_list = std::make_unique_for_overwrite<value_type const *[]>((size_t)param_i);
     std::copy_n(param_types.data(), param_i, param_types_list.get());
 
-    // TODO: parse return type and specify here
-    bld.reg.get<node_type>(mem_state).type = new func{void_type::self(), (size_t)param_i, std::move(param_types_list)};
+    auto const ret = (scan.peek.kind != token_kind::LeftBrace)
+                         ? type()
+                         : void_type::self();
+
+    bld.reg.get<node_type>(mem_state).type = new func{ret, (size_t)param_i, std::move(param_types_list)};
 
     auto name = scan.lexeme(nametok);
     ensure(!env.top->funcs.contains(name), "Function already defined");
 
-    // TODO: pass the type here
     env.top->funcs.insert({name, mem_state});
 
     // TODO: merge with global env
+    // TODO: typecheck that the return type matches what's expected
     (void)block();
 }
 
@@ -719,7 +726,7 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
     // parsing
 
     auto nametok = eat(token_kind::Ident); // name
-    auto type = eat(token_kind::Ident);    // type
+    auto ty = type();                      // type
 
     // codegen
 
@@ -730,7 +737,16 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
     auto name = scan.lexeme(nametok);
     env.new_var(name, node);
 
-    return env.top->types[scan.lexeme(type)];
+    return ty;
+}
+
+inline value_type const *parser::type() noexcept
+{
+    // TODO: parse qualifiers, etc.
+    auto name = eat(token_kind::Ident); // type
+
+    // TODO: do a full search for the type, not just on `top`
+    return env.top->types[scan.lexeme(name)];
 }
 
 // helpers
