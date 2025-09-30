@@ -18,6 +18,7 @@
 // - `control_flow_type`
 // - maybe handle operators using a function table, rather than letting the type handle them?
 // - get rid of `meet` eventually; replace for specific operations
+// ^ why? for one, value and flow types should not mix
 
 struct type
 {
@@ -329,10 +330,44 @@ struct struct_ : type
 {
 };
 
+struct func final : value_type
+{
+    inline func(value_type const *ret, size_t n_params, std::unique_ptr<value_type const *[]> params) noexcept
+        : ret{ret}, n_params{n_params}, params(std::move(params)) {}
+
+    // TODO: figure this out
+    inline type const *meet(type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+
+    // binary
+
+    inline value_type const *add(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+    inline value_type const *sub(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+    inline value_type const *mul(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+    inline value_type const *div(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+
+    // unary
+    inline value_type const *neg() const noexcept { return op_not_implemented_type::self(); }
+
+    value_type const *ret;
+    size_t n_params;
+    std::unique_ptr<value_type const *[]> params;
+};
+
 // Section: tuple types
 
-struct tuple : type
+struct tuple : value_type
 {
+    // TODO: figure these out
+
+    // binary
+
+    inline value_type const *add(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+    inline value_type const *sub(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+    inline value_type const *mul(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+    inline value_type const *div(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+
+    // unary
+    inline value_type const *neg() const noexcept { return op_not_implemented_type::self(); }
 };
 
 struct tuple_top : tuple
@@ -349,18 +384,21 @@ struct tuple_bot : tuple
 
 struct tuple_n : tuple
 {
-    inline tuple_n(size_t n, std::unique_ptr<type const *[]> sub) noexcept
+    inline tuple_n(size_t n, std::unique_ptr<value_type const *[]> sub) noexcept
         : n{n}, sub(std::move(sub)) {}
 
     inline type const *meet(type const *rhs) const noexcept
     {
+        // TODO: return something better here
+        if (!rhs->as<value_type>()) return nullptr;
+
         if (auto ptr = rhs->as<tuple_n>(); ptr && ptr->n == n)
         {
             // TODO: is this correct?
-            auto new_tuple = std::make_unique_for_overwrite<type const *[]>(n);
+            auto new_tuple = std::make_unique_for_overwrite<value_type const *[]>(n);
             for (size_t i{}; i < n; ++i)
             {
-                new_tuple[i] = sub[i]->meet(ptr->sub[i]);
+                new_tuple[i] = sub[i]->meet(ptr->sub[i])->as<value_type>();
             }
 
             return new tuple_n{n, std::move(new_tuple)};
@@ -370,5 +408,5 @@ struct tuple_n : tuple
     }
 
     size_t n;
-    std::unique_ptr<type const *[]> sub;
+    std::unique_ptr<value_type const *[]> sub;
 };

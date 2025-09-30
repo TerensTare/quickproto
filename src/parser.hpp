@@ -19,6 +19,8 @@
 //   - easier way to detect unreachable code (anything after `continue`/`break`/`return` until block finishes is unreachable)
 // ^ cons:
 //   - parsing rules are more complex now and maybe more error prone?
+//   - how do you separate shadowed variable from non-shadowed ones? (you need to know when merging)
+//
 // - variable mapping should be block-specific
 // - drop recursion from expr and stmt rules
 // - apparently you don't need `Store` nodes most of the time; you only need them for nodes where it has an effect on
@@ -199,7 +201,7 @@ private:
     // helpers
     // <ident> <ident> (name type)
     // i is the index of the parameter in the function declaration (used by the Proj node emitted for the parameter)
-    inline type const *param_decl(int64_t i) noexcept;
+    inline value_type const *param_decl(int64_t i) noexcept;
 
     inline void merge(scope &parent, scope const &lhs, scope const &rhs) noexcept;
 
@@ -224,7 +226,7 @@ private:
     inline token eat(token_kind kind) noexcept;
     inline token eat(std::span<token_kind const> kinds) noexcept;
 
-    inline static entt::dense_map<std::string_view, type const *, dual_hash, dual_cmp> global_types() noexcept;
+    inline static entt::dense_map<std::string_view, value_type const *, dual_hash, dual_cmp> global_types() noexcept;
 };
 
 inline entt::entity parser::primary() noexcept
@@ -658,7 +660,7 @@ inline void parser::func_decl() noexcept
 
     // param_decl,*
     int64_t param_i = 0;
-    std::vector<type const *> param_types;
+    std::vector<value_type const *> param_types;
     if (scan.peek.kind != token_kind::RightParen)
     {
         auto ty = param_decl(param_i++); // param_decl
@@ -675,16 +677,16 @@ inline void parser::func_decl() noexcept
 
     eat(token_kind::RightParen); // ')'
 
-    auto param_types_list = std::make_unique_for_overwrite<type const *[]>((size_t)param_i);
+    auto param_types_list = std::make_unique_for_overwrite<value_type const *[]>((size_t)param_i);
     std::copy_n(param_types.data(), param_i, param_types_list.get());
 
-    bld.reg.get<node_type>(mem_state).type = new tuple_n{(size_t)param_i, std::move(param_types_list)};
-
-    // TODO: parse return type
+    // TODO: parse return type and specify here
+    bld.reg.get<node_type>(mem_state).type = new func{void_type::self(), (size_t)param_i, std::move(param_types_list)};
 
     auto name = scan.lexeme(nametok);
     ensure(!env.top->funcs.contains(name), "Function already defined");
 
+    // TODO: pass the type here
     env.top->funcs.insert({name, mem_state});
 
     // TODO: merge with global env
@@ -712,7 +714,7 @@ inline void parser::prog() noexcept
 
 // helper rules
 
-inline type const *parser::param_decl(int64_t i) noexcept
+inline value_type const *parser::param_decl(int64_t i) noexcept
 {
     // parsing
 
@@ -767,9 +769,9 @@ inline token parser::eat(std::span<token_kind const> kinds) noexcept
     fail("Unexpected token kind out of list");
 }
 
-inline entt::dense_map<std::string_view, type const *, dual_hash, dual_cmp> parser::global_types() noexcept
+inline entt::dense_map<std::string_view, value_type const *, dual_hash, dual_cmp> parser::global_types() noexcept
 {
-    entt::dense_map<std::string_view, type const *, dual_hash, dual_cmp> ret;
+    entt::dense_map<std::string_view, value_type const *, dual_hash, dual_cmp> ret;
     ret.insert({"int", int_bot::self()});
     return ret;
 }
