@@ -8,25 +8,46 @@
 // - memory optimizations:
 // ^ optimized memory layout
 // ^ allocate everything on an allocator, keep builder and graph trivial
-// - add a free-list to node allocation
-// - set the type of each node, either by specifying or by deduction
-// - optimize constant stores on `peephole`
 // - make `StartNode` hold `$ctrl; params...` as input and use `$ctrl`, `params...` as normal
 // - `Store` should be `Store(memory, proj, value)`
-// - link constants back to `mem_state` on `peephole`
+// - move passes to `builder` instead of `parser` and run on each node parsed
+// - build-from-blueprint style for less error-prone code + it might help with defining passes
 
-// component
-// Nodes having this component will be deleted by DCE
-struct dead_node final
+inline type const *type_by_op(node_op op) noexcept
 {
-    inline static void on_construct(entt::registry &reg, entt::entity id) noexcept
+    switch (op)
     {
-        // "dead nodes" are infective to their children (TODO: make sure you do NOT delete shared nodes)
-        auto &&dead = reg.storage<dead_node>();
-        auto &&to_add = reg.get<node_inputs const>(id).nodes;
-        dead.insert(to_add.begin(), to_add.end());
+    case node_op::Add:
+    case node_op::Sub:
+    case node_op::Mul:
+    case node_op::Div:
+    case node_op::UnaryNeg:
+        return int_bot::self();
+
+    case node_op::Fadd:
+    case node_op::Fsub:
+    case node_op::Fmul:
+    case node_op::Fdiv:
+        return float_bot::self();
+
+    case node_op::CmpEq:
+    case node_op::CmpGe:
+    case node_op::CmpGt:
+    case node_op::CmpLe:
+    case node_op::CmpLt:
+    case node_op::CmpNe:
+        return bool_bot::self();
+
+    case node_op::IfYes:
+    case node_op::IfNot:
+    case node_op::Region:
+        return ctrl::self();
+
+        // HACK: figure each node out instead
+    default:
+        return bot::self();
     }
-};
+}
 
 struct builder final
 {
@@ -40,7 +61,7 @@ struct builder final
     inline entt::entity make(node_op op, Ins... ins) noexcept
     {
         // TODO: recheck this
-        entt::entity nins_arr[]{entt::null, ins...}; // Add null in the beginning because C++ doesn't allow arrays of size 0
+        entt::entity const nins_arr[]{entt::null, ins...}; // Add null in the beginning because C++ doesn't allow arrays of size 0
         return make(op, std::span(nins_arr + 1, sizeof...(Ins)));
     }
 
@@ -57,7 +78,7 @@ inline entt::entity builder::make(node_op op, std::span<entt::entity const> nins
 
     auto const n = reg.create();
     reg.emplace<node_op>(n, op);
-    reg.emplace<node_type>(n, bot::self());
+    reg.emplace<node_type>(n, type_by_op(op));
     reg.emplace<node_inputs>(n, std::vector(nins.begin(), nins.end()));
 
     // TODO: optimize
@@ -82,6 +103,5 @@ inline entt::entity builder::makeval(entt::entity memory, node_op op, type const
 
 inline void prune_dead_code(builder &bld) noexcept
 {
-    auto &&to_cut = bld.reg.storage<dead_node>();
-    bld.reg.destroy(to_cut.begin(), to_cut.end());
+    // TODO: implement
 }

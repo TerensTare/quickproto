@@ -3,6 +3,8 @@
 
 #include "backends/backend.hpp"
 
+// TODO: on hover, show the type of the node
+
 struct dot_backend final : backend
 {
     inline void compile(FILE *out, entt::registry const &reg);

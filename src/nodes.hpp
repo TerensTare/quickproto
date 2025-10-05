@@ -62,7 +62,6 @@ enum class node_op : uint8_t
     IfNot,  // IfNot In=[ctrlNode, condNode]
     Region, // Region - a merge point for multiple control flows
     Phi,    // Phi In=[regionNode, dataNode x len(regionIn)]
-    Stop,   // Stop In=[allReturnsInFunction]
 
     UnaryNeg,
     UnaryNot,
@@ -71,6 +70,12 @@ enum class node_op : uint8_t
     Sub,
     Mul,
     Div,
+
+    // floating point operations
+    Fadd,
+    Fsub,
+    Fmul,
+    Fdiv,
 
     // TODO: simplify these to just < and ==
     CmpEq,

@@ -73,5 +73,4 @@ private:
 inline void pass_registry::replace(entt::entity oldn, entt::entity newn)
 {
     // TODO: implement
-    bld.reg.emplace<dead_node>(oldn);
 }

@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "base.hpp"
 #include "pass/pass.hpp"
 
 // fold `Phi` nodes where the condition is constant to just one value
@@ -23,6 +24,10 @@ struct phi_fold_pass final : graph_pass
         auto const cond = ins_pool.get(if_yes).nodes[0];
 
         auto ty = bld.reg.get<node_type const>(cond).type;
+
+        // TODO: move this to typechecking phase
+        // (maybe): have a `ctrl.cond(cond_expr)` function on `ctrl` that typechecks this instead
+        ensure(ty->as<bool_>(), "Condition of an `if` must be a boolean type!");
 
         if (auto cond = ty->as<bool_const>())
             return ins[2 - cond->b]; // if true, pick 1, else pick 2

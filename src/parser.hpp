@@ -11,6 +11,9 @@
 #include "pass/pass_registry.hpp"
 
 // TODO:
+// - `IfYes` and `IfNot` should connect to effect nodes in their blocks first, then to `Region`
+// - have lookup tables that map operator to node type, depending on operands (eg. `Iadd` or `Fadd` for `+`)
+// - (maybe) return expr type when parsing for cache friendliness?
 // - when encountering a return, you should probably set the memory state to the `return` node
 // - the returned values (on multi-return case) outlive the `then` call inside `block`, so you can just pass them as a span
 // ^ also have local storage for return params that is reused, just so you don't reallocate every function call
@@ -225,6 +228,24 @@ private:
 
     inline void merge(scope &parent, scope const &lhs, scope const &rhs) noexcept;
 
+    inline entt::entity region(entt::entity then_state, entt::entity else_state) noexcept
+    {
+
+        // TODO: does this part belong here?
+        // TODO: only add one region at the end; when the whole `if-else` tree is parsed
+        // ^ even if there is just an `if` branch, the `else` is implicit on both `Region` and `Phi`, you just need to figure out its value on both cases
+        // ^ (maybe) this can be done by a pass instead?
+        entt::entity const region_children[]{then_state, else_state};
+        // TODO: the nodes should be effect nodes, not input nodes
+        auto const region = bld.make(node_op::Region, region_children);
+        mem_state = region; // TODO: should this be here?
+        return region;
+        // TODO:
+        // - spawn a Region node here that links to the if/else branches or just the `If`
+        // ^ also take care to handle multiple if-else case
+        // - spawn a Phi node for merging values
+    }
+
     // `phi`, but used for `return` nodes
     // TODO: return one entity per expr in return
     inline entt::entity return_phi(entt::entity region, entt::entity lhs, entt::entity rhs) noexcept
@@ -252,7 +273,7 @@ private:
         else
             return old;
 
-        auto const ret= bld.make(node_op::Phi, ins);
+        auto const ret = bld.make(node_op::Phi, ins);
         return ret; // TODO: link the region here and run passes
     }
 
@@ -490,25 +511,15 @@ inline entt::entity parser::if_stmt() noexcept
     auto if_not_node = bld.make(node_op::IfNot, cond);
     bld.reg.emplace<effect>(if_not_node, mem_state);
 
-    // TODO: does this part belong here?
-    // TODO: only add one region at the end; when the whole `if-else` tree is parsed
-    // ^ even if there is just an `if` branch, the `else` is implicit on both `Region` and `Phi`, you just need to figure out its value on both cases
-    // ^ (maybe) this can be done by a pass instead?
-    // TODO: merge returns into a single node per function; use Phi nodes to merge return values into one
-    entt::entity const region_children[]{if_yes_node, if_not_node};
-    // TODO: the nodes should be effect nodes, not input nodes
-    auto const region = bld.make(node_op::Region, region_children);
-    // TODO:
-    // - spawn a Region node here that links to the if/else branches or just the `If`
-    // ^ also take care to handle multiple if-else case
-    // - spawn a Phi node for merging values
-
-    mem_state = region; // TODO: do you need this?
+    mem_state = if_yes_node;
 
     // TODO: return should be the merged node of return from either branch or return of the statement after the `if`
     return block(
         [&](scope const *then_env, entt::entity then_ret)
         {
+            auto const then_state = mem_state; // TODO: link this to `region` instead
+            mem_state = if_not_node;
+
             if (scan.peek.kind == token_kind::KwElse)
             {
                 scan.next(); // 'else'
@@ -522,25 +533,33 @@ inline entt::entity parser::if_stmt() noexcept
                 // if_stmt | block, then the outer `stmt` that tails
                 // TODO: also merge the `env` even on the `if` case
                 return (scan.peek.kind == token_kind::KwIf)
+                           // TODO: make a region for this case too
                            ? if_stmt()
                            : block([&](scope const *else_env, entt::entity else_ret)
                                    {
-                                       // TODO: all this is common on both branches
-                                       auto const rest_ret = stmt(); // rest of block statements
+                                       mem_state = region(then_state, mem_state);
 
-                                       // TODO: is this correct?
+                                       // TODO: all this is common on both branches
+                                       // TODO: is this correct? (from here to return)
                                        // codegen
                                        merge(*env.top, *then_env, *else_env);
 
                                        // TODO: if either `if` or `else` has a return, codegen a phi node and return it
                                        // TODO: is this correct?
                                        // TODO: `phi` should merge the children of `return` nodes
-                                       auto const merge_ret = return_phi(region, then_ret, else_ret);
+                                       auto const merge_ret = return_phi(mem_state, then_ret, else_ret);
+
+                                       // TODO: parse after merging nodes
+                                       // TODO: this should be yet another branch, marked as `if(false)` ie. `~ctrl`
+                                       auto const rest_ret = stmt(); // rest of block statements
+
                                        return (merge_ret != entt::null) ? merge_ret : rest_ret; //
                                    });
             }
             else
             {
+                auto const region = this->region(then_state, mem_state);
+
                 // TODO: implement
                 // TODO: also merge `then_env` with `env.top` in this case
                 auto const rest_ret = stmt(); // trailing stmt
