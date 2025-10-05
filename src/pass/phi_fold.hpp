@@ -1,0 +1,32 @@
+
+#pragma once
+
+#include "pass/pass.hpp"
+
+// fold `Phi` nodes where the condition is constant to just one value
+struct phi_fold_pass final : graph_pass
+{
+    inline bitset256 supported_nodes() const noexcept
+    {
+        return mask_ops({
+            node_op::Phi,
+        });
+    }
+
+    inline entt::entity run_pass(builder &bld, entt::entity node) noexcept
+    {
+        auto &&ins_pool = bld.reg.storage<node_inputs>();
+        auto &&ins = ins_pool.get(node).nodes;
+
+        auto const region = ins[0];
+        auto const if_yes = ins_pool.get(region).nodes[0];
+        auto const cond = ins_pool.get(if_yes).nodes[0];
+
+        auto ty = bld.reg.get<node_type const>(cond).type;
+
+        if (auto cond = ty->as<bool_const>())
+            return ins[2 - cond->b]; // if true, pick 1, else pick 2
+
+        return entt::null;
+    }
+};

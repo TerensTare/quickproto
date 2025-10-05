@@ -11,6 +11,12 @@
 #include "pass/pass_registry.hpp"
 
 // TODO:
+// - when encountering a return, you should probably set the memory state to the `return` node
+// - the returned values (on multi-return case) outlive the `then` call inside `block`, so you can just pass them as a span
+// ^ also have local storage for return params that is reused, just so you don't reallocate every function call
+// - make `then` be a `function_ref`
+// - have a `then` function on every rule to do stuff like clean up variables from env, etc.
+// - inline all the CPS calls
 // - eventually transition to CPS for stmt/decl rules
 // ^ benefits:
 //   - more optimized assembly generated
@@ -21,13 +27,10 @@
 //   - parsing rules are more complex now and maybe more error prone?
 //   - how do you separate shadowed variable from non-shadowed ones? (you need to know when merging)
 //
-// - variable mapping should be block-specific
-// - drop recursion from expr and stmt rules
 // - apparently you don't need `Store` nodes most of the time; you only need them for nodes where it has an effect on
 // ^ (which is most of the time just class/global variables; for pointer function params you can just change the variable value from the calling function)
 // ^ but you still need to take care of loads of non-const variables (eg. `a = 10; b += a; a = 20`)
 // - implement codegen for comparison (<, <=, ==, !=, >, >=)
-// - merge `terminal_stmt` at call site
 // - structured logging
 // ^ type-erased logging destination output (stdout, json file, etc...)
 // - the type of the `State` node should be a tuple of parameters of the function (+ maybe the return type?), so that when you `Proj` it you know how much to offset
@@ -144,53 +147,66 @@ struct parser final
     inline entt::entity expr(parse_prec prec = parse_prec::None) noexcept;
 
     // stmt
+    // - the entity returned is the node of the `return` statement in this block, if any; `null` otherwise
+    // ^ if a `continue` or `break` statement is reached before a `return` (not in a nested block), but on this block, the return is also `null` as the statement is unreachable
+    // - also note that any of these functions will fully parse the remaining of the containing block for performance reasons
 
-    // <ident>,+ ':=' expr,+ ';'
-    inline void local_decl(std::span<token const> ids) noexcept;
-    // expr comp_op expr ';'
-    // comp_op ::= '+=' | '-=' | '*=' | '/='
-    inline void comp_assign(std::span<token const> ids) noexcept;
-    // expr post_op ';'
-    // post_op ::= '++' | '--'
-    inline void post_op(std::span<token const> ids) noexcept;
-
-    // 'if' expr block ('else' ( if_stmt | block ))?
-    inline void if_stmt() noexcept;
-    // 'for' expr block
-    inline void for_stmt() noexcept;
-    // break_stmt | continue_stmt
-    //  break_stmt    ::= 'break'  <ident>? ';'
-    //  continue_stmt ::= 'continue' <ident>? ';'
-    inline void control_flow(token_kind which) noexcept;
-    // 'return' expr,* ';'
-    inline void return_stmt() noexcept;
-    // '{' stmt* '}'
+    // <ident>,+ ':=' expr,+ ';' stmt
     [[nodiscard]]
-    inline scope *block() noexcept;
-    // local_decl | comp_assign | post_op
-    inline void simple_stmt() noexcept;
+    inline entt::entity local_decl(std::span<token const> ids) noexcept;
+    // expr comp_op expr ';' stmt
+    // comp_op ::= '+=' | '-=' | '*=' | '/='
+    [[nodiscard]]
+    inline entt::entity comp_assign(std::span<token const> ids) noexcept;
+    // expr post_op ';' stmt
+    // post_op ::= '++' | '--'
+    [[nodiscard]]
+    inline entt::entity post_op(std::span<token const> ids) noexcept;
 
-    // stmt ::= block
+    // 'if' expr block ('else' ( if_stmt | block ))? stmt
+    [[nodiscard]]
+    inline entt::entity if_stmt() noexcept;
+    // 'for' expr block stmt
+    [[nodiscard]]
+    inline entt::entity for_stmt() noexcept;
+    // break_stmt | continue_stmt
+    //  break_stmt    ::= 'break' <ident>? ';' stmt
+    //  continue_stmt ::= 'continue' <ident>? ';' stmt
+    [[nodiscard]]
+    inline entt::entity control_flow(token_kind which) noexcept;
+    // 'return' expr,* ';' stmt
+    [[nodiscard]]
+    inline entt::entity return_stmt() noexcept;
+    // '{' stmt
+    // ^ no `}` as that is handled by the `stmt` recursion
+    [[nodiscard]]
+    inline entt::entity block(auto &&then) noexcept;
+    // local_decl | comp_assign | post_op
+    [[nodiscard]]
+    inline entt::entity simple_stmt() noexcept;
+
+    // stmt ::= '}'
+    //        | block stmt
     //        | if_stmt
     //        | for_stmt
     //        | return_stmt
     //        | break_stmt
     //        | continue_stmt
     //        | simple_stmt
-    inline void stmt() noexcept;
+    inline entt::entity stmt() noexcept;
 
     // decl
 
-    // 'func' <ident> '(' param_decl,*, ')' type? block
+    // 'func' <ident> '(' param_decl,*, ')' type? block decl
     inline void func_decl() noexcept;
     // func_decl | type_decl
     inline void decl() noexcept;
-    // decl*
+    // decl
     inline void prog() noexcept;
 
     scanner scan;
     builder bld;
-    pass_registry passes{.bld = bld};
+    pass_registry passes{bld};
 
     scope global{.types = global_types()};
     env env{.top = &global};
@@ -203,12 +219,25 @@ private:
     // i is the index of the parameter in the function declaration (used by the Proj node emitted for the parameter)
     inline value_type const *param_decl(int64_t i) noexcept;
 
-    // section types
+    // type
+
     inline value_type const *type() noexcept;
 
     inline void merge(scope &parent, scope const &lhs, scope const &rhs) noexcept;
 
+    // `phi`, but used for `return` nodes
+    // TODO: return one entity per expr in return
+    inline entt::entity return_phi(entt::entity region, entt::entity lhs, entt::entity rhs) noexcept
+    {
+        // TODO: handle case when either branch is null
+        // TODO: handle multiple returns
+        // TODO: ensure number of expr matches on both
+        auto const ret = bld.make(node_op::Phi, region, lhs, rhs);
+        return passes.run(ret);
+    }
+
     // merge `lhs` and `rhs` into a new phi node if either of the nodes is different from `old` and return it, otherwise return `old`
+    // TODO: if no `else` branch, `rhs` should be `old`
     inline entt::entity phi(entt::entity old, entt::entity lhs, entt::entity rhs) noexcept
     {
         auto const l = lhs != old, r = rhs != old;
@@ -223,7 +252,8 @@ private:
         else
             return old;
 
-        return bld.make(node_op::Phi, ins);
+        auto const ret= bld.make(node_op::Phi, ins);
+        return ret; // TODO: link the region here and run passes
     }
 
     inline token eat(token_kind kind) noexcept;
@@ -264,12 +294,12 @@ inline entt::entity parser::primary() noexcept
         return bld.makeval(mem_state, node_op::Const, new int_const{val});
     }
 
-    // TODO: don't use integer type here anymore
     case KwFalse:
-        return bld.makeval(mem_state, node_op::Const, new int_const{false});
+        return bld.makeval(mem_state, node_op::Const, new bool_const{false});
     case KwTrue:
-        return bld.makeval(mem_state, node_op::Const, new int_const{true});
+        return bld.makeval(mem_state, node_op::Const, new bool_const{true});
 
+    // TODO: don't use integer type here anymore
     case KwNil:
         return bld.makeval(mem_state, node_op::Const, new int_const{0});
 
@@ -336,7 +366,7 @@ inline entt::entity parser::expr(parse_prec prec) noexcept
     return lhs;
 }
 
-inline void parser::local_decl(std::span<token const> ids) noexcept
+inline entt::entity parser::local_decl(std::span<token const> ids) noexcept
 {
     // parsing
 
@@ -360,9 +390,11 @@ inline void parser::local_decl(std::span<token const> ids) noexcept
     env.new_var(name, rhs);
     // TODO: is this the correct node?
     // bld.effects[rhs->id] = mem_state;
+
+    return stmt();
 }
 
-inline void parser::comp_assign(std::span<token const> ids) noexcept
+inline entt::entity parser::comp_assign(std::span<token const> ids) noexcept
 {
     // TODO:
     // - the assignment should be evaluated RTL
@@ -402,9 +434,10 @@ inline void parser::comp_assign(std::span<token const> ids) noexcept
     opnode = passes.run(opnode);
 
     env.set_var(name, opnode);
+    return stmt();
 }
 
-inline void parser::post_op(std::span<token const> ids) noexcept
+inline entt::entity parser::post_op(std::span<token const> ids) noexcept
 {
     // parsing
 
@@ -437,39 +470,32 @@ inline void parser::post_op(std::span<token const> ids) noexcept
     opnode = passes.run(opnode);
 
     env.set_var(name, opnode);
+
+    return stmt();
 }
 
-inline void parser::if_stmt() noexcept
+inline entt::entity parser::if_stmt() noexcept
 {
-    // TODO:
-    // if both the `if` and `else` branch have no `return` stmt, then evaluate everything else and return the remaining body's return as a return value
+    // TODO: ensure condition is boolean-like
 
     // parsing
-    eat(token_kind::KwIf); // 'if'
-    auto cond = expr();    // expr
-
-    auto old_state = mem_state;
+    eat(token_kind::KwIf);    // 'if'
+    auto const cond = expr(); // expr
 
     // TODO: is this mem_state or $ctrl?
-    auto if_node = bld.make(node_op::If, cond);
-    bld.reg.emplace<effect>(if_node, mem_state);
-    mem_state = if_node;
+    auto if_yes_node = bld.make(node_op::IfYes, cond);
+    bld.reg.emplace<effect>(if_yes_node, mem_state);
 
-    auto then = bld.makeval(if_node, node_op::Proj, new int_const{0});
-    // TODO: remove this when enabling on `makeval`
-    bld.reg.emplace<effect>(then, if_node);
-    // mem_state = then;
-
-    auto else_ = bld.makeval(if_node, node_op::Proj, new int_const{1});
-    // TODO: remove this when enabling on `makeval`
-    bld.reg.emplace<effect>(else_, if_node);
-    // mem_state = else_;
+    // TODO: is this mem_state or $ctrl?
+    auto if_not_node = bld.make(node_op::IfNot, cond);
+    bld.reg.emplace<effect>(if_not_node, mem_state);
 
     // TODO: does this part belong here?
     // TODO: only add one region at the end; when the whole `if-else` tree is parsed
-    // TODO: even if there is just an `if` branch, the `else` is implicit on both `Region` and `Phi`, you just need to figure out its value on both cases
+    // ^ even if there is just an `if` branch, the `else` is implicit on both `Region` and `Phi`, you just need to figure out its value on both cases
+    // ^ (maybe) this can be done by a pass instead?
     // TODO: merge returns into a single node per function; use Phi nodes to merge return values into one
-    entt::entity region_children[]{then, else_};
+    entt::entity const region_children[]{if_yes_node, if_not_node};
     // TODO: the nodes should be effect nodes, not input nodes
     auto const region = bld.make(node_op::Region, region_children);
     // TODO:
@@ -477,53 +503,72 @@ inline void parser::if_stmt() noexcept
     // ^ also take care to handle multiple if-else case
     // - spawn a Phi node for merging values
 
-    mem_state = region;
+    mem_state = region; // TODO: do you need this?
 
-    auto parent = env.top;
+    // TODO: return should be the merged node of return from either branch or return of the statement after the `if`
+    return block(
+        [&](scope const *then_env, entt::entity then_ret)
+        {
+            if (scan.peek.kind == token_kind::KwElse)
+            {
+                scan.next(); // 'else'
 
-    auto then_env = block();
+                ensure(
+                    (scan.peek.kind == token_kind::KwIf || scan.peek.kind == token_kind::LeftBrace),
+                    "Expected `if` or `{` after `else`!" //
+                );
 
-    scope *else_env = nullptr;
-    entt::entity else_ret = entt::null; // TODO: is this correct?
+                // TODO: parse the `stmt` after the `if`, return or not
+                // if_stmt | block, then the outer `stmt` that tails
+                // TODO: also merge the `env` even on the `if` case
+                return (scan.peek.kind == token_kind::KwIf)
+                           ? if_stmt()
+                           : block([&](scope const *else_env, entt::entity else_ret)
+                                   {
+                                       // TODO: all this is common on both branches
+                                       auto const rest_ret = stmt(); // rest of block statements
 
-    if (scan.peek.kind == token_kind::KwElse)
-    {
-        scan.next(); // 'else'
+                                       // TODO: is this correct?
+                                       // codegen
+                                       merge(*env.top, *then_env, *else_env);
 
-        ensure(
-            (scan.peek.kind == token_kind::KwIf || scan.peek.kind == token_kind::LeftBrace),
-            "Expected `if` or `{` after `else`!" //
-        );
+                                       // TODO: if either `if` or `else` has a return, codegen a phi node and return it
+                                       // TODO: is this correct?
+                                       // TODO: `phi` should merge the children of `return` nodes
+                                       auto const merge_ret = return_phi(region, then_ret, else_ret);
+                                       return (merge_ret != entt::null) ? merge_ret : rest_ret; //
+                                   });
+            }
+            else
+            {
+                // TODO: implement
+                // TODO: also merge `then_env` with `env.top` in this case
+                auto const rest_ret = stmt(); // trailing stmt
 
-        // TODO: get the return of each branch and merge them too
-        (scan.peek.kind == token_kind::KwIf)
-            // TODO: the `if` should be evaluated inside the `else` environment; handle that
-            ? if_stmt()                 // if_stmt
-            : void(else_env = block()); // | block
-    }
-
-    // codegen
-    merge(*parent, *then_env, *else_env);
-    env.top = parent;
-
-    // TODO: merge the returns
-    // return phi(entt::null, ret, else_ret); //
+                // TODO: is this correct?
+                return return_phi(region, then_ret, rest_ret);
+            } //
+        });
 }
 
-inline void parser::for_stmt() noexcept
+inline entt::entity parser::for_stmt() noexcept
 {
     // parsing
     eat(token_kind::KwFor); // 'for'
 
     auto cond = expr();
-    (void)block();
+    // TODO: correct this
+    return block([](scope const *env, entt::entity ret)
+                 {
+                     return ret; //
+                 });
 
     // codegen
 
     // TODO: implement
 }
 
-inline void parser::control_flow(token_kind which) noexcept
+inline entt::entity parser::control_flow(token_kind which) noexcept
 {
     // TODO: split this for better tail calls
 
@@ -539,9 +584,14 @@ inline void parser::control_flow(token_kind which) noexcept
     // codegen
 
     // TODO: implement
+    // TODO: check that this is inside a `for`/`switch`/etc.
+
+    // TODO: unreachable code
+    (void)stmt();
+    return entt::null;
 }
 
-inline void parser::return_stmt() noexcept
+inline entt::entity parser::return_stmt() noexcept
 {
     // parsing
     eat(token_kind::KwReturn); // 'return'
@@ -562,37 +612,36 @@ inline void parser::return_stmt() noexcept
     eat(token_kind::Semicolon); // ;
 
     // codegen
-    auto out = bld.make(node_op::Return, outs);
-    // TODO: recheck this
-    (void)bld.reg.get_or_emplace<effect>(out, mem_state);
+    // NOTE: everything after `return` is unreachable code, so address that with a warning or something
+    (void)stmt();
+
+    return outs[0]; // TODO: return all values
 }
 
-inline scope *parser::block() noexcept
+inline entt::entity parser::block(auto &&then) noexcept
 {
     // TODO: figure out merging with parent
-    // TODO: do not heap allocate these when switching to CPS
-    auto block_env = new scope{.parent = env.top};
-    env.top = block_env;
+    scope block_env{.parent = env.top};
+    env.top = &block_env;
 
     eat(token_kind::LeftBrace); // {
-    while (scan.peek.kind != token_kind::RightBrace)
-        stmt();
-    eat(token_kind::RightBrace);
+    auto ret = stmt();          // stmt*}
 
     env.top = env.top->parent;
-    return block_env;
+    return then(&block_env, ret);
 }
 
-inline void parser::simple_stmt() noexcept
+inline entt::entity parser::simple_stmt() noexcept
 {
     std::vector<token> ids;
-    ids.push_back(eat(token_kind::Ident));
+    ids.push_back(eat(token_kind::Ident)); // ident
 
+    // (,ident)*
     while (scan.peek.kind == token_kind::Comma)
     {
         scan.next(); // ,
 
-        ids.push_back(eat(token_kind::Ident));
+        ids.push_back(eat(token_kind::Ident)); // ident
     }
 
     switch (scan.peek.kind)
@@ -611,17 +660,30 @@ inline void parser::simple_stmt() noexcept
         return comp_assign(ids);
 
     default:
-        return fail("Expected one of the following: `:=`, `++`, `--`, `+=`, `-=`, `*=`, `/=`");
-        // TODO: return an "unreachable type" (top I guess?)
+        fail("Expected one of the following: `:=`, `++`, `--`, `+=`, `-=`, `*=`, `/=`");
+        return entt::null;
+        // TODO: return an "error type" (top I guess?)
     }
 }
 
-inline void parser::stmt() noexcept
+inline entt::entity parser::stmt() noexcept
 {
     switch (scan.peek.kind)
     {
     case token_kind::LeftBrace:
-        return (void)block(); // TODO: also merge env with parent
+        return block([&](scope const *env, entt::entity ret)
+                     {
+                         auto left = stmt();
+
+                         // TODO: also merge env with parent
+
+                         return ret != entt::null ? ret : left; //
+                     });
+
+    // TODO: break on `RightBrace`
+    case token_kind::RightBrace:
+        scan.next();       // '}'
+        return entt::null; // if `}` is reached, it means there was no return
 
     case token_kind::KwReturn:
         return return_stmt();
@@ -684,20 +746,45 @@ inline void parser::func_decl() noexcept
     auto param_types_list = std::make_unique_for_overwrite<value_type const *[]>((size_t)param_i);
     std::copy_n(param_types.data(), param_i, param_types_list.get());
 
-    auto const ret = (scan.peek.kind != token_kind::LeftBrace)
-                         ? type()
-                         : void_type::self();
+    auto const ret_type = (scan.peek.kind != token_kind::LeftBrace)
+                              ? type()
+                              : void_type::self();
 
-    bld.reg.get<node_type>(mem_state).type = new func{ret, (size_t)param_i, std::move(param_types_list)};
+    bld.reg.get<node_type>(mem_state).type = new func{ret_type, (size_t)param_i, std::move(param_types_list)};
 
     auto name = scan.lexeme(nametok);
     ensure(!env.top->funcs.contains(name), "Function already defined");
 
     env.top->funcs.insert({name, mem_state});
 
-    // TODO: merge with global env
     // TODO: typecheck that the return type matches what's expected
-    (void)block();
+    (void)block([&](scope const *func_env, entt::entity ret)
+                {
+                    // TODO: handle multi-return case
+                    entt::entity const params[]{ret};
+                    auto const out = bld.make(node_op::Return, std::span(params, ret != entt::null));
+                    // TODO: recheck this
+                    (void)bld.reg.get_or_emplace<effect>(out, mem_state);
+
+                    // TODO: move this to a function
+                    // TODO: handle assignment to constants
+                    for (auto &&[name, id] : env.top->vars)
+                    {
+                        auto const iter = func_env->vars.find(name);
+                        if (iter != func_env->vars.end())
+                        {
+                            id = iter->second;
+                        }
+                    }
+
+                    // TODO: from here, go over the function until all nodes you see have a `reachable` tag
+                    return out; //
+                });
+
+    // TODO: find a better way to do this (eg. the last declaration might not be a func decl)
+    prune_dead_code(bld);
+
+    decl(); // TODO: maybe call this inside the `block`?
 }
 
 inline void parser::decl() noexcept
@@ -707,14 +794,16 @@ inline void parser::decl() noexcept
     case token_kind::KwFunc:
         func_decl();
         break;
+
+    case token_kind::Eof:
+        return;
         // TODO: default: error
     }
 }
 
 inline void parser::prog() noexcept
 {
-    while (scan.peek.kind != token_kind::Eof)
-        decl(); // decl*
+    decl(); // decl*
 
     // TODO: codegen a node that passes control flow to initializing globals and then `main`
 }

@@ -82,8 +82,8 @@ inline cmd_args cmd_args::parse(int argc, char **argv) noexcept
         // std::exit(0);
     }
 
-    // auto in_path = "sample.qp";
-    char const *in_path = argv[1];
+    auto in_path = "sample.qp";
+    // char const *in_path = argv[1];
     char const *out_path = "out.dot";
     bool opt = false;
 

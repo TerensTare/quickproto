@@ -5,6 +5,7 @@
 #include "builder.hpp"
 
 // TODO:
+// - notice how you know at call site what node type you are running a pass on; use that as a filter
 // - shortcut method that tells you if the pass might work on the given node or not (is this a bloom filter?)
 // ^ ```cpp
 // pass_registry passes;

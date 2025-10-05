@@ -6,11 +6,12 @@
 #include <vector>
 
 // TODO:
+// - `top` and `bot` should have a common representation for `value_type` types; and `top` should "bubble out" when encountered
+// - `value_type.assign`, a non-customizable call that just sets `lhs = rhs`, but unless `lhs` is NOT assignable from `rhs`
 // - what is the type of an error?
 // - use a custom typeid solution, rather than dynamic cast
 // ^ How do you represent subclassing with indices? (eg. how do you know a type is any kind of `int`?)
 // ^ but do you really need subclassing?
-// - separate value from control flow nodes
 // ^ value and control flow nodes have disjoint types, so make separate types somehow
 // - signed and unsigned integers should be separate; then you only have these types for integers
 // ^ then sized integers are for example: uint8 is `uint_range{0, 255}`
@@ -97,9 +98,16 @@ struct value_type : type
     virtual value_type const *div(value_type const *rhs) const noexcept = 0;
     // unary
     virtual value_type const *neg() const noexcept = 0;
+    // comparators
+    // TODO: just return a `bool_` here probably?
+    // TODO: implement other ops by these ops + `not`
+    // TODO: consider using just `cmp3` instead
+    virtual value_type const *eq(value_type const *rhs) const noexcept = 0;
+    virtual value_type const *lt(value_type const *rhs) const noexcept = 0;
 };
 
 // signals that this operator/overload is not implemented
+// TODO: add info about operand types
 struct op_not_implemented_type final : value_type
 {
     inline static value_type const *self() noexcept
@@ -108,18 +116,22 @@ struct op_not_implemented_type final : value_type
         return &ty;
     }
 
-    inline type const *meet(type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+    inline type const *meet(type const *rhs) const noexcept { return this; }
 
     // TODO: return a `value_error` instead
-    inline value_type const *add(value_type const *rhs) const noexcept { return self(); }
-    inline value_type const *sub(value_type const *rhs) const noexcept { return self(); }
-    inline value_type const *mul(value_type const *rhs) const noexcept { return self(); }
-    inline value_type const *div(value_type const *rhs) const noexcept { return self(); }
+    inline value_type const *add(value_type const *rhs) const noexcept { return this; }
+    inline value_type const *sub(value_type const *rhs) const noexcept { return this; }
+    inline value_type const *mul(value_type const *rhs) const noexcept { return this; }
+    inline value_type const *div(value_type const *rhs) const noexcept { return this; }
 
     // unary
 
     // TODO: return a `value_error` instead
-    inline value_type const *neg() const noexcept { return self(); }
+    inline value_type const *neg() const noexcept { return this; }
+
+    // comparators
+    inline value_type const *eq(value_type const *rhs) const noexcept { return this; }
+    inline value_type const *lt(value_type const *rhs) const noexcept { return this; }
 };
 
 struct void_type final : value_type
@@ -142,6 +154,102 @@ struct void_type final : value_type
 
     // unary
     inline value_type const *neg() const noexcept { return op_not_implemented_type::self(); }
+
+    // comparators
+    inline value_type const *eq(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+    inline value_type const *lt(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+};
+
+// Section: boolean types
+
+struct bool_ : value_type
+{
+    // binary
+    inline value_type const *add(value_type const *rhs) const noexcept final { return op_not_implemented_type::self(); }
+    inline value_type const *sub(value_type const *rhs) const noexcept final { return op_not_implemented_type::self(); }
+    inline value_type const *mul(value_type const *rhs) const noexcept final { return op_not_implemented_type::self(); }
+    inline value_type const *div(value_type const *rhs) const noexcept final { return op_not_implemented_type::self(); }
+
+    // unary
+    inline value_type const *neg() const noexcept final { return op_not_implemented_type::self(); }
+
+    // comparators
+    inline value_type const *lt(value_type const *rhs) const noexcept final { return op_not_implemented_type::self(); }
+};
+
+struct bool_top final : bool_
+{
+    inline static value_type const *self() noexcept
+    {
+        static bool_top top;
+        return &top;
+    }
+
+    inline type const *meet(type const *rhs) const noexcept
+    {
+        // TODO: is this correct?
+        return (rhs->as<bool_>())
+                   ? rhs
+                   : op_not_implemented_type::self();
+    }
+
+    // impl value_type
+
+    // comparators
+    inline value_type const *eq(value_type const *rhs) const noexcept
+    {
+        // TODO: is this correct?
+        return (rhs->as<bool_>())
+                   ? rhs
+                   : op_not_implemented_type::self();
+    }
+};
+
+struct bool_const final : bool_
+{
+    inline explicit bool_const(bool b) noexcept
+        : b{b} {}
+
+    // TODO: impl correctly
+    // impl type
+    inline type const *meet(type const *rhs) const noexcept { return this; }
+
+    // impl value_type
+
+    // comparators
+    inline value_type const *eq(value_type const *rhs) const noexcept
+    {
+        if (auto rbool = rhs->as<bool_>())
+        {
+            // TODO: is this correct?
+            if (auto r = rbool->as<bool_const>())
+                return new bool_const{b == r->b};
+            else
+                return r->eq(this);
+        }
+        else
+            return op_not_implemented_type::self();
+    }
+
+    bool b;
+};
+
+struct bool_bot final : bool_
+{
+    inline static value_type const *self() noexcept
+    {
+        static bool_bot bot;
+        return &bot;
+    }
+
+    // impl type
+    inline type const *meet(type const *rhs) const noexcept { return this; }
+
+    // impl value_type
+
+    // comparators
+    // TODO: handle non-bool meets
+    inline value_type const *eq(value_type const *rhs) const noexcept { return this; }
 };
 
 // Section: int types
@@ -160,8 +268,9 @@ struct int_top final : int_
 
     inline type const *meet(type const *rhs) const noexcept
     {
-        if (rhs->as<int_>())
-            return rhs;
+        return (rhs->as<int_>())
+                   ? rhs
+                   : op_not_implemented_type::self();
         // TODO: handle non-int meets
     }
 
@@ -171,29 +280,47 @@ struct int_top final : int_
     // TODO: implement
     inline value_type const *add(value_type const *rhs) const noexcept
     {
-        if (rhs->as<int_>())
-            return rhs;
+        return (rhs->as<int_>())
+                   ? rhs
+                   : op_not_implemented_type::self();
     }
 
     inline value_type const *sub(value_type const *rhs) const noexcept
     {
-        if (rhs->as<int_>())
-            return rhs;
+        return (rhs->as<int_>())
+                   ? rhs
+                   : op_not_implemented_type::self();
     }
 
     inline value_type const *mul(value_type const *rhs) const noexcept
     {
-        if (rhs->as<int_>())
-            return rhs;
+        return (rhs->as<int_>())
+                   ? rhs
+                   : op_not_implemented_type::self();
     }
 
     inline value_type const *div(value_type const *rhs) const noexcept
     {
-        if (rhs->as<int_>())
-            return rhs;
+        return (rhs->as<int_>())
+                   ? rhs
+                   : op_not_implemented_type::self();
     }
 
     inline value_type const *neg() const noexcept { return this; }
+
+    inline value_type const *eq(value_type const *rhs) const noexcept
+    {
+        return (rhs->as<int_>())
+                   ? rhs
+                   : op_not_implemented_type::self();
+    }
+
+    inline value_type const *lt(value_type const *rhs) const noexcept
+    {
+        return (rhs->as<int_>())
+                   ? rhs
+                   : op_not_implemented_type::self();
+    }
 };
 
 struct int_bot final : int_
@@ -216,6 +343,9 @@ struct int_bot final : int_
     inline value_type const *div(value_type const *rhs) const noexcept { return this; }
 
     inline value_type const *neg() const noexcept { return this; }
+
+    inline value_type const *eq(value_type const *rhs) const noexcept { return this; }
+    inline value_type const *lt(value_type const *rhs) const noexcept { return this; }
 };
 
 struct int_const final : int_
@@ -231,6 +361,8 @@ struct int_const final : int_
             return (ptr->n == n) ? this : int_bot::self();
         else if (rhs->as<int_top>())
             return this;
+        else
+            return op_not_implemented_type::self();
     }
 
     // impl value_type
@@ -242,6 +374,8 @@ struct int_const final : int_
             return new int_const{n + ptr->n};
         else if (rhs->as<int_top>())
             return this;
+        else
+            return op_not_implemented_type::self();
     }
 
     inline value_type const *sub(value_type const *rhs) const noexcept
@@ -252,6 +386,8 @@ struct int_const final : int_
             return new int_const{n - ptr->n};
         else if (rhs->as<int_top>())
             return this;
+        else
+            return op_not_implemented_type::self();
     }
 
     inline value_type const *mul(value_type const *rhs) const noexcept
@@ -262,6 +398,8 @@ struct int_const final : int_
             return new int_const{n * ptr->n};
         else if (rhs->as<int_top>())
             return this;
+        else
+            return op_not_implemented_type::self();
     }
 
     inline value_type const *div(value_type const *rhs) const noexcept
@@ -272,9 +410,35 @@ struct int_const final : int_
             return (ptr->n == 0) ? int_top::self() : new int_const{n / ptr->n};
         else if (rhs->as<int_top>())
             return this;
+        else
+            return op_not_implemented_type::self();
     }
 
     inline value_type const *neg() const noexcept { return new int_const{-n}; }
+
+    inline value_type const *eq(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_bot>())
+            return bool_bot::self();
+        else if (auto ptr = rhs->as<int_const>(); ptr)
+            return new bool_const{n == ptr->n};
+        else if (rhs->as<int_top>())
+            return bool_top::self();
+        else
+            return op_not_implemented_type::self();
+    }
+
+    inline value_type const *lt(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_bot>())
+            return bool_bot::self();
+        else if (auto ptr = rhs->as<int_const>(); ptr)
+            return new bool_const{n < ptr->n};
+        else if (rhs->as<int_top>())
+            return bool_top::self();
+        else
+            return op_not_implemented_type::self();
+    }
 
     int64_t n;
 };
@@ -348,6 +512,9 @@ struct func final : value_type
     // unary
     inline value_type const *neg() const noexcept { return op_not_implemented_type::self(); }
 
+    inline value_type const *eq(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+    inline value_type const *lt(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+
     value_type const *ret;
     size_t n_params;
     std::unique_ptr<value_type const *[]> params;
@@ -368,6 +535,10 @@ struct tuple : value_type
 
     // unary
     inline value_type const *neg() const noexcept { return op_not_implemented_type::self(); }
+
+    // comparators
+    inline value_type const *eq(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
+    inline value_type const *lt(value_type const *rhs) const noexcept { return op_not_implemented_type::self(); }
 };
 
 struct tuple_top : tuple
@@ -390,7 +561,8 @@ struct tuple_n : tuple
     inline type const *meet(type const *rhs) const noexcept
     {
         // TODO: return something better here
-        if (!rhs->as<value_type>()) return nullptr;
+        if (!rhs->as<value_type>())
+            return nullptr;
 
         if (auto ptr = rhs->as<tuple_n>(); ptr && ptr->n == n)
         {

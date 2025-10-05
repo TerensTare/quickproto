@@ -30,7 +30,12 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
     case node_op::Proj:
         return std::format_to(out, "[label=\"Proj({})\"]", type.type->as<int_const>()->n);
     case node_op::Const:
-        return std::format_to(out, "[label=\"{}\"]", type.type->as<int_const>()->n);
+    {
+        if (auto &&int_ = type.type->as<int_const>())
+            return std::format_to(out, "[label=\"{}\"]", int_->n);
+        else if (auto &&bool_ = type.type->as<bool_const>())
+            return std::format_to(out, "[label=\"{}\"]", bool_->b);
+    }
     case node_op::Addr:
         return std::format_to(out, "[label=\"Addr({})\"]", type.type->as<int_const>()->n);
     case node_op::UnaryNeg:
@@ -50,8 +55,10 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
     case node_op::CmpLe:
         return circle_node("<=");
 
-    case node_op::If:
-        return named_node("If");
+    case node_op::IfYes:
+        return named_node("IfYes");
+    case node_op::IfNot:
+        return named_node("IfNot");
     case node_op::Region:
         return named_node("Region");
     case node_op::Phi:

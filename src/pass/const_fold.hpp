@@ -8,8 +8,13 @@ struct const_fold_pass final : graph_pass
     inline bitset256 supported_nodes() const noexcept
     {
         return mask_ops({
-            node_op::Add, node_op::Sub, node_op::Mul, node_op::Div, // binary
-            node_op::UnaryNeg,                                      // unary
+            node_op::Add,
+            node_op::Sub,
+            node_op::Mul,
+            node_op::Div,      // binary
+            node_op::UnaryNeg, // unary
+            // TODO: implement const folding for other comparison operators
+            node_op::CmpEq, // comparators
         });
     }
 
@@ -59,6 +64,10 @@ struct const_fold_pass final : graph_pass
             case node_op::Div:
                 return bld.reg.get<node_type>(ins[0]).type->as<value_type>() //
                     ->div(bld.reg.get<node_type>(ins[1]).type->as<value_type>());
+
+            case node_op::CmpEq:
+                return bld.reg.get<node_type>(ins[0]).type->as<value_type>() //
+                    ->eq(bld.reg.get<node_type>(ins[1]).type->as<value_type>());
 
             default:
                 std::unreachable();

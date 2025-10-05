@@ -10,6 +10,7 @@
 #include "type.hpp"
 
 // TODO:
+// - most of the nodes have a fixed (small) number of children, so use a smallvector instead for less dynamic allocations
 // - embed node type on id
 // - multi-assign + multi-declare variables
 // - store nodes by hash (hash=id, but based on node kind, etc.) - called hash-cons; it also helps with constant pooling
@@ -57,7 +58,8 @@ enum class node_op : uint8_t
     Start,     // Start - a no-op node for preserving ordering between loads/stores and for representing side effects. Also indicates the beginning of a function
     Return,    // Return Value=[n] In=[ctrl, returnNode x n]
 
-    If,     // If In=[ctrlNode, condNode]
+    IfYes,  // IfYes In=[ctrlNode, condNode]
+    IfNot,  // IfNot In=[ctrlNode, condNode]
     Region, // Region - a merge point for multiple control flows
     Phi,    // Phi In=[regionNode, dataNode x len(regionIn)]
     Stop,   // Stop In=[allReturnsInFunction]

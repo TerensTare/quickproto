@@ -2,6 +2,7 @@
 #pragma once
 
 #include "pass/const_fold.hpp"
+#include "pass/phi_fold.hpp"
 
 // TODO:
 // - the control flow of `peephole` would most likely be like this:
@@ -43,13 +44,27 @@ struct pass_registry final
             }
         }
 
+        if (phi_fold_nodes.test(op))
+        {
+            if (auto const newn = phi_fold_pass.run_pass(bld, node); newn != entt::null)
+            {
+                // TODO: can you make it so that passes are ran only when a node is created? (ie. no users yet)
+                replace(node, newn);
+                return newn;
+            }
+        }
+
         return node;
     }
 
     // TODO: make it extensible
     builder &bld;
+    // const_fold
     const_fold_pass const_fold_pass;
     bitset256 const_fold_nodes = const_fold_pass.supported_nodes();
+    // phi_fold
+    phi_fold_pass phi_fold_pass;
+    bitset256 phi_fold_nodes = phi_fold_pass.supported_nodes();
 
 private:
     inline void replace(entt::entity oldn, entt::entity newn);
