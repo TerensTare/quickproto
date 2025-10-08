@@ -66,6 +66,9 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
     case node_op::Phi:
         return named_node("Phi");
 
+    case node_op::CallStatic:
+        return named_node("CallStatic");
+
     default:
         return named_node("<Unknown>");
     }

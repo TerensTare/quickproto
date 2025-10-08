@@ -11,7 +11,7 @@
 #include "pass/pass_registry.hpp"
 
 // TODO:
-// - `IfYes` and `IfNot` should connect to effect nodes in their blocks first, then to `Region`
+// - do you need a `memory` edge for operations that affect memory state? (then `effect` becomes `happens_after`)
 // - have lookup tables that map operator to node type, depending on operands (eg. `Iadd` or `Fadd` for `+`)
 // - (maybe) return expr type when parsing for cache friendliness?
 // - when encountering a return, you should probably set the memory state to the `return` node
@@ -85,31 +85,35 @@ var_env merge(var_env const &parent, var_env const &left, var_env const &right) 
 
 enum class parse_prec : uint8_t
 {
+    Stop, // non-expr token, when hit the parser will stop parsing an expression and move on to the next rule
     None,
-    Assign,     // =
     Or,         // or
     And,        // and
     Equality,   // == !=
     Comparison, // < <= >= >
     Term,       // + -
     Factor,     // * /
-    Unary,      // ! -
-    Call,       // . ()
-    Primary,
 };
 
-inline static std::unordered_map<token_kind, parse_prec, std::identity> const prec_table{
-    {token_kind::EqualEqual, parse_prec::Equality},
-    {token_kind::BangEqual, parse_prec::Equality},
-    {token_kind::Greater, parse_prec::Comparison},
-    {token_kind::GreaterEqual, parse_prec::Comparison},
-    {token_kind::Less, parse_prec::Comparison},
-    {token_kind::LessEqual, parse_prec::Comparison},
-    {token_kind::Plus, parse_prec::Term},
-    {token_kind::Minus, parse_prec::Term},
-    {token_kind::Star, parse_prec::Factor},
-    {token_kind::Slash, parse_prec::Factor},
-};
+static constexpr auto prec_table = []()
+{
+    std::array<parse_prec, 256> table;
+    // MSVC does not like a for loop here
+    std::fill_n(table.data(), 256, parse_prec::Stop);
+
+    table[(uint8_t)token_kind::EqualEqual] = parse_prec::Equality;
+    table[(uint8_t)token_kind::BangEqual] = parse_prec::Equality;
+    table[(uint8_t)token_kind::Greater] = parse_prec::Comparison;
+    table[(uint8_t)token_kind::GreaterEqual] = parse_prec::Comparison;
+    table[(uint8_t)token_kind::Less] = parse_prec::Comparison;
+    table[(uint8_t)token_kind::LessEqual] = parse_prec::Comparison;
+    table[(uint8_t)token_kind::Plus] = parse_prec::Term;
+    table[(uint8_t)token_kind::Minus] = parse_prec::Term;
+    table[(uint8_t)token_kind::Star] = parse_prec::Factor;
+    table[(uint8_t)token_kind::Slash] = parse_prec::Factor;
+
+    return table;
+}();
 
 constexpr node_op op_node(token_kind kind) noexcept
 {
@@ -146,7 +150,12 @@ struct parser final
 {
     // expr
 
+    // TODO: parse call expression in case an `Ident` is found
+    // ^ still you need to find a way to parse things such as `a.b(c)` or similar
+    // parse any calls by using `rule ::= ( '(' expr,* ')' )*`, assuming an `ident` was encountered right before
+    inline entt::entity call_or_ident(entt::entity base) noexcept;
     inline entt::entity primary() noexcept;
+
     inline entt::entity expr(parse_prec prec = parse_prec::None) noexcept;
 
     // stmt
@@ -253,7 +262,8 @@ private:
         // TODO: handle case when either branch is null
         // TODO: handle multiple returns
         // TODO: ensure number of expr matches on both
-        auto const ret = bld.make(node_op::Phi, region, lhs, rhs);
+        entt::entity const ins[]{region, lhs, rhs};
+        auto const ret = bld.make(node_op::Phi, ins);
         return passes.run(ret);
     }
 
@@ -277,11 +287,41 @@ private:
         return ret; // TODO: link the region here and run passes
     }
 
+    // codegen the `Start` and `Exit` nodes of the program, pass the control flow to `main` (and initializing globals when added).
+    inline void codegen_main() noexcept;
+
+    // parsing helpers
+
     inline token eat(token_kind kind) noexcept;
     inline token eat(std::span<token_kind const> kinds) noexcept;
 
     inline static entt::dense_map<std::string_view, value_type const *, dual_hash, dual_cmp> global_types() noexcept;
 };
+
+inline entt::entity parser::call_or_ident(entt::entity base) noexcept
+{
+    while (scan.peek.kind == token_kind::LeftParen)
+    {
+        scan.next(); // '('
+
+        // TODO: parse multiple arguments
+        auto const arg = expr();
+
+        eat(token_kind::RightParen);
+
+        // TODO: ensure `base` is callable
+
+        // TODO: is this correct? (consider for example, a call is made inside an `If`)
+        entt::entity const ins[]{mem_state, arg, base};
+        auto const call = bld.make(node_op::CallStatic, ins);
+
+        // TODO: is this correct?
+        mem_state = call;
+        base = call;
+    }
+
+    return base;
+}
 
 inline entt::entity parser::primary() noexcept
 {
@@ -331,7 +371,9 @@ inline entt::entity parser::primary() noexcept
         // TODO: figure out the type of the node
         // auto const addr = bld.makeval(mem_state, op::Addr, int_bot::self(), {.i64 = 0});
 
-        return env.get_var(name);
+        // TODO: in case of calls, this should get the function node
+        auto const val = env.get_var(name);
+        return call_or_ident(val);
     }
 
     case LeftParen:
@@ -366,20 +408,15 @@ inline entt::entity parser::expr(parse_prec prec) noexcept
 {
     auto lhs = passes.run(primary());
 
-    while (scan.peek.kind != token_kind::Eof)
+    parse_prec rprec;
+    while (prec < (rprec = prec_table[(uint8_t)scan.peek.kind]))
     {
-        auto iter = prec_table.find(scan.peek.kind);
-        if (iter == prec_table.end() || iter->second < prec)
-            break;
-
-        auto rprec = iter->second;
-
-        auto op = scan.next().kind;
+        auto const op = scan.next().kind;
         // TODO: if right-associative op, increase precedence of rprec by 1
         // TODO: do you even have right-associative operators?
-        auto rhs = expr(rprec);
+        auto const rhs = expr(rprec);
 
-        entt::entity inputs[]{lhs, rhs};
+        entt::entity const inputs[]{lhs, rhs};
         lhs = bld.make(op_node(op), inputs);
         lhs = passes.run(lhs);
     }
@@ -451,7 +488,8 @@ inline entt::entity parser::comp_assign(std::span<token const> ids) noexcept
     // TODO: figure out the type of the node
     // auto const res = bld.makeval(op::Addr, int_bot::self(), {.i64 = 0});
 
-    auto opnode = bld.make(node_op, env.get_var(name), rhs);
+    entt::entity const ins[]{env.get_var(name), rhs};
+    auto opnode = bld.make(node_op, ins);
     opnode = passes.run(opnode);
 
     env.set_var(name, opnode);
@@ -483,11 +521,12 @@ inline entt::entity parser::post_op(std::span<token const> ids) noexcept
     // TODO: figure out the type of the node
     // auto const res = bld.makeval(mem_state, op::Addr, int_bot::self());
 
-    auto opnode = bld.make(
-        node_op,
+    entt::entity const ins[]{
         env.get_var(name),
-        bld.makeval(mem_state, node_op::Const, new int_const{1}) //
-    );
+        bld.makeval(mem_state, node_op::Const, new int_const{1}),
+    };
+
+    auto opnode = bld.make(node_op, ins);
     opnode = passes.run(opnode);
 
     env.set_var(name, opnode);
@@ -504,11 +543,11 @@ inline entt::entity parser::if_stmt() noexcept
     auto const cond = expr(); // expr
 
     // TODO: is this mem_state or $ctrl?
-    auto if_yes_node = bld.make(node_op::IfYes, cond);
+    auto const if_yes_node = bld.make(node_op::IfYes, std::span(&cond, 1));
     bld.reg.emplace<effect>(if_yes_node, mem_state);
 
     // TODO: is this mem_state or $ctrl?
-    auto if_not_node = bld.make(node_op::IfNot, cond);
+    auto const if_not_node = bld.make(node_op::IfNot, std::span(&cond, 1));
     bld.reg.emplace<effect>(if_not_node, mem_state);
 
     mem_state = if_yes_node;
@@ -815,16 +854,18 @@ inline void parser::decl() noexcept
         break;
 
     case token_kind::Eof:
-        return;
-        // TODO: default: error
+        codegen_main();
+        break;
+
+    default:
+        fail("Expected `func` or <EOF>");
+        break;
     }
 }
 
 inline void parser::prog() noexcept
 {
     decl(); // decl*
-
-    // TODO: codegen a node that passes control flow to initializing globals and then `main`
 }
 
 // helper rules
@@ -839,7 +880,7 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
     // codegen
 
     // TODO: recheck this
-    auto node = bld.make(node_op::Proj, mem_state);
+    auto const node = bld.make(node_op::Proj, std::span(&mem_state, 1));
     bld.reg.get<node_type>(node).type = new int_const{i};
 
     auto name = scan.lexeme(nametok);
@@ -857,7 +898,14 @@ inline value_type const *parser::type() noexcept
     return env.top->types[scan.lexeme(name)];
 }
 
-// helpers
+// codegen helpers
+
+inline void parser::codegen_main() noexcept
+{
+    // TODO: implement this as a call to `main`, it should take care of checking that the function exists, type signature, memory state, etc.
+}
+
+// parsing helpers
 
 inline token parser::eat(token_kind kind) noexcept
 {

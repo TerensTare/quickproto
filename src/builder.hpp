@@ -57,12 +57,10 @@ struct builder final
     // invariant: `users` and `user_counter` are updated for any entity in `nins`
     inline entt::entity make(node_op op, std::span<entt::entity const> nins) noexcept;
 
-    template <std::same_as<entt::entity>... Ins>
-    inline entt::entity make(node_op op, Ins... ins) noexcept
+    inline entt::entity make(node_op op) noexcept
     {
-        // TODO: recheck this
-        entt::entity const nins_arr[]{entt::null, ins...}; // Add null in the beginning because C++ doesn't allow arrays of size 0
-        return make(op, std::span(nins_arr + 1, sizeof...(Ins)));
+        entt::entity dummy[1];
+        return make(op, std::span(dummy, 0));
     }
 
     // Add some kind of static checks to `op` here

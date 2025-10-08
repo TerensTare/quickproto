@@ -58,6 +58,8 @@ struct dual_cmp final
 struct scope final
 {
     // TODO(maybe): move constant stuff to a separate part; they never get merged
+    // ^ never mind, just merge everything to one map, implement `value_type.assign` and let it handle everything
+    // ^ but in that case, how do you distinguish between struct types and struct instances? (types implement `value_type.construct`)
     entt::dense_map<std::string_view, entt::entity, dual_hash, dual_cmp> funcs; // (name -> (mem_state, type)) mapping
     entt::dense_map<std::string_view, value_type const *, dual_hash, dual_cmp> types;
     entt::dense_map<std::string_view, entt::entity, dual_hash, dual_cmp> vars;

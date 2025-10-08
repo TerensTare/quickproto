@@ -47,6 +47,7 @@
 // - [x] separate node from builder in files
 
 // TODO: can you fit all ops in a uint8_t?
+// TODO: specify `Out` links of each node (ie. can you link a ctrl, memory, data edge to this node?)
 
 // component
 enum class node_op : uint8_t
@@ -84,6 +85,8 @@ enum class node_op : uint8_t
     CmpLe,
     CmpGt,
     CmpGe,
+
+    CallStatic, // CallStatic In=[ctrl, state, args..., func_to_call] Out=[ctrl, state, result...]
 
     Addr,  // Addr Value=someRegister
     Const, // Const Value=someValue
