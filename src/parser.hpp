@@ -12,6 +12,7 @@
 
 // TODO:
 // - do you need a `memory` edge for operations that affect memory state? (then `effect` becomes `happens_after`)
+// ^ (maybe) current `memory` and `ctrl` node should be on `builder`, not here? (they both start from `node::Start`)
 // - have lookup tables that map operator to node type, depending on operands (eg. `Iadd` or `Fadd` for `+`)
 // - (maybe) return expr type when parsing for cache friendliness?
 // - when encountering a return, you should probably set the memory state to the `return` node
@@ -262,8 +263,9 @@ private:
         // TODO: handle case when either branch is null
         // TODO: handle multiple returns
         // TODO: ensure number of expr matches on both
-        entt::entity const ins[]{region, lhs, rhs};
+        entt::entity const ins[]{lhs, rhs};
         auto const ret = bld.make(node_op::Phi, ins);
+        (void)bld.reg.emplace<region_of_phi>(ret, region);
         return passes.run(ret);
     }
 
@@ -284,7 +286,8 @@ private:
             return old;
 
         auto const ret = bld.make(node_op::Phi, ins);
-        return ret; // TODO: link the region here and run passes
+        (void)bld.reg.emplace<region_of_phi>(ret, old); // TODO: specify the actual region here and run passes
+        return ret;
     }
 
     // codegen the `Start` and `Exit` nodes of the program, pass the control flow to `main` (and initializing globals when added).
@@ -312,8 +315,11 @@ inline entt::entity parser::call_or_ident(entt::entity base) noexcept
         // TODO: ensure `base` is callable
 
         // TODO: is this correct? (consider for example, a call is made inside an `If`)
-        entt::entity const ins[]{mem_state, arg, base};
+        entt::entity const ins[]{arg, base};
         auto const call = bld.make(node_op::CallStatic, ins);
+        // TODO: the call should probably modify just the memory node, not the control flow node
+        // TODO: the call should probably link to the `Return` node of the called function, not the `Start`
+        bld.reg.emplace<effect>(call, mem_state);
 
         // TODO: is this correct?
         mem_state = call;
@@ -552,7 +558,6 @@ inline entt::entity parser::if_stmt() noexcept
 
     mem_state = if_yes_node;
 
-    // TODO: return should be the merged node of return from either branch or return of the statement after the `if`
     return block(
         [&](scope const *then_env, entt::entity then_ret)
         {
@@ -673,7 +678,8 @@ inline entt::entity parser::return_stmt() noexcept
     // NOTE: everything after `return` is unreachable code, so address that with a warning or something
     (void)stmt();
 
-    return outs[0]; // TODO: return all values
+    // TODO: return all values
+    return (outs.size() == 0) ? (entt::entity)entt::null : outs[0];
 }
 
 inline entt::entity parser::block(auto &&then) noexcept
@@ -811,36 +817,40 @@ inline void parser::func_decl() noexcept
     bld.reg.get<node_type>(mem_state).type = new func{ret_type, (size_t)param_i, std::move(param_types_list)};
 
     auto name = scan.lexeme(nametok);
-    ensure(!env.top->funcs.contains(name), "Function already defined");
+    ensure(!env.top->defs.contains(name), "Function already defined");
 
-    env.top->funcs.insert({name, mem_state});
+    // TODO: should the function point to the `Start`, `Return`, or where?
+    // ^ you can actually pre-define the `Return` node here, attach it to the env table, then set the node's inputs accordingly
+    // ^ this way you don't need to specially handle the case where a `return void` function does not have a `return` stmt
+    env.top->defs.insert({name, mem_state});
 
     // TODO: typecheck that the return type matches what's expected
-    (void)block([&](scope const *func_env, entt::entity ret)
-                {
-                    // TODO: handle multi-return case
-                    entt::entity const params[]{ret};
-                    auto const out = bld.make(node_op::Return, std::span(params, ret != entt::null));
-                    // TODO: recheck this
-                    (void)bld.reg.get_or_emplace<effect>(out, mem_state);
+    // TODO: is this actually the `Return` node?
+    auto const ret = block([&](scope const *func_env, entt::entity ret)
+                           {
+                               // TODO: handle multi-return case
+                               entt::entity const params[]{ret};
+                               auto const out = bld.make(node_op::Return, std::span(params, ret != entt::null));
+                               // TODO: recheck this
+                               (void)bld.reg.get_or_emplace<effect>(out, mem_state);
 
-                    // TODO: move this to a function
-                    // TODO: handle assignment to constants
-                    for (auto &&[name, id] : env.top->vars)
-                    {
-                        auto const iter = func_env->vars.find(name);
-                        if (iter != func_env->vars.end())
-                        {
-                            id = iter->second;
-                        }
-                    }
+                               // TODO: move this to a function
+                               // TODO: handle assignment to constants
+                               // TODO: only merge variables, not functions/types, etc.
+                               // TODO: is there any in-between scope that has not been merged?
+                               for (auto &&[name, id] : env.top->defs)
+                               {
+                                   auto const iter = func_env->defs.find(name);
+                                   if (iter != func_env->defs.end())
+                                       id = iter->second;
+                               }
 
-                    // TODO: from here, go over the function until all nodes you see have a `reachable` tag
-                    return out; //
-                });
+                               // TODO: from here, go over the function until all nodes you see have a `reachable` tag
+                               return out; //
+                           });
 
     // TODO: find a better way to do this (eg. the last declaration might not be a func decl)
-    prune_dead_code(bld);
+    prune_dead_code(bld, ret);
 
     decl(); // TODO: maybe call this inside the `block`?
 }
@@ -883,6 +893,7 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
     auto const node = bld.make(node_op::Proj, std::span(&mem_state, 1));
     bld.reg.get<node_type>(node).type = new int_const{i};
 
+    // TODO: these params should be defined in the function's block, not on global env
     auto name = scan.lexeme(nametok);
     env.new_var(name, node);
 
@@ -903,6 +914,28 @@ inline value_type const *parser::type() noexcept
 inline void parser::codegen_main() noexcept
 {
     // TODO: implement this as a call to `main`, it should take care of checking that the function exists, type signature, memory state, etc.
+
+    auto const entry = bld.make(node_op::Start);
+
+    auto const main_iter = env.top->defs.find(std::string_view{"main"});
+    ensure(main_iter != env.top->defs.end(), "Program does not define a main function!");
+    auto const main_node = main_iter->second;
+    auto const main_ty = bld.reg.get<node_type const>(main_node).type;
+    ensure(main_ty->as<func>(), "Program does not define a main function!");
+    auto const main_func = main_ty->as<func>();
+    ensure(main_func->ret->as<void_type>(), "Function `main` cannot return a value!");
+    ensure(main_func->n_params == 0, "Function `main` cannot have parameters!");
+
+    entt::entity const main_ins[]{main_node};
+    auto const call_main = bld.make(node_op::CallStatic, main_ins);
+    bld.reg.get_or_emplace<effect>(call_main).target = entry;
+    // TODO: is this correct?
+    mem_state = call_main;
+
+    // TODO: is this correct?
+    auto const exit = bld.makeval(mem_state, node_op::Exit, new int_const{0});
+    // TODO: remove this when specified on `makeval`
+    bld.reg.get_or_emplace<effect>(exit).target = mem_state;
 }
 
 // parsing helpers
@@ -919,13 +952,14 @@ inline void parser::merge(scope &parent, scope const &lhs, scope const &rhs) noe
 
     // TODO: hash the `key` for faster lookup
 
-    for (auto &&[key, value] : parent.vars)
+    // TODO: only merge variables, nothing else
+    for (auto &&[key, value] : parent.defs)
     {
         // NOTE: `lhs` and `rhs` have every key from `parent` and a node is needed only if there is a change in either lhs or rhs
         // ^ this means you can search until you reach the beginning of `parent` for a variable and ignore everything before
         // TODO: handle case where `else` is missing
-        auto const left = lhs.vars.contains(key) ? lhs.vars.at(key) : entt::null;
-        auto const right = rhs.vars.contains(key) ? rhs.vars.at(key) : entt::null;
+        auto const left = lhs.defs.contains(key) ? lhs.defs.at(key) : entt::null;
+        auto const right = rhs.defs.contains(key) ? rhs.defs.at(key) : entt::null;
 
         auto const node = phi(value, left, right);
         value = node;

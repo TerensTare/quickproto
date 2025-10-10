@@ -28,6 +28,10 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
         return named_node("State");
     case node_op::Return:
         return named_node("Return");
+    // HACK: use a separate function to print the type
+    case node_op::Exit:
+        return std::format_to(out, "[label=\"Exit({})\"]", type.type->as<int_const>()->n);
+
         // HACK: use a separate function to print the type
     case node_op::Proj:
         return std::format_to(out, "[label=\"Proj({})\"]", type.type->as<int_const>()->n);
@@ -99,7 +103,10 @@ inline void dot_backend::compile(FILE *out, entt::registry const &reg)
     }
 
     for (auto [dep, in] : reg.storage<effect>()->each())
-        std::print(out, "  n{} -> n{} [color=\"red\"];\n", dep, in.target);
+        std::print(out, "  n{} -> n{} [color=red];\n", dep, in.target);
+
+    for (auto [phi, region] : reg.storage<region_of_phi>()->each())
+        std::print(out, "  n{} -> n{} [style=dotted];\n", phi, region.region);
 
     std::print(out, "}}");
 }

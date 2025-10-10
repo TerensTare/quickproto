@@ -53,8 +53,9 @@ struct builder final
 {
     // invariant: The returned entity has the following components:
     // `node`
+    // `node_type`
     // `node_inputs`
-    // invariant: `users` and `user_counter` are updated for any entity in `nins`
+    // invariant: `users` is updated for any entity in `nins`
     inline entt::entity make(node_op op, std::span<entt::entity const> nins) noexcept;
 
     inline entt::entity make(node_op op) noexcept
@@ -78,6 +79,7 @@ inline entt::entity builder::make(node_op op, std::span<entt::entity const> nins
     reg.emplace<node_op>(n, op);
     reg.emplace<node_type>(n, type_by_op(op));
     reg.emplace<node_inputs>(n, std::vector(nins.begin(), nins.end()));
+    reg.emplace<maybe_reachable>(n);
 
     // TODO: optimize
     for (uint32_t i{}; auto id : nins)
@@ -99,7 +101,46 @@ inline entt::entity builder::makeval(entt::entity memory, node_op op, type const
     return n;
 }
 
-inline void prune_dead_code(builder &bld) noexcept
+inline void prune_dead_code(builder &bld, entt::entity ret) noexcept
 {
-    // TODO: implement
+    struct reachable final
+    {
+    };
+
+    auto &&new_nodes = bld.reg.storage<maybe_reachable>();
+    auto &&visited = bld.reg.storage<reachable>();
+
+    auto const &ins_storage = bld.reg.storage<node_inputs>();
+    auto const &effects = bld.reg.storage<effect>();
+
+    // TODO: do you need to repeat this?
+    std::vector<entt::entity> to_visit;
+    to_visit.push_back(ret);
+
+    while (!to_visit.empty())
+    {
+        auto top = to_visit.back();
+        to_visit.pop_back();
+
+        // TODO: is this ever the case that this node was visited previously?
+        if (visited.contains(top))
+            continue;
+
+        // TODO: add other links here as well
+        // TODO: maybe just follow the effect and memory chain instead?
+        // ^ also you can check here `visited` so that you don't push into the vector, causing a possible reallocation
+        auto &&ins = ins_storage.get(top).nodes;
+        to_visit.insert(to_visit.end(), ins.begin(), ins.end());
+
+        if (effects.contains(top))
+            to_visit.push_back(effects.get(top).target);
+
+        visited.emplace(top);
+    }
+
+    // TODO: these are unreachable, so maybe leave a warning for significant nodes? (functions, etc.)
+    auto to_cut_view = entt::basic_view{std::tie(new_nodes), std::tie(visited)};
+    bld.reg.destroy(to_cut_view.begin(), to_cut_view.end());
+
+    new_nodes.clear();
 }

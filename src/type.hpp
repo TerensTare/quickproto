@@ -4,15 +4,11 @@
 #include <concepts>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <vector>
-
-// TODO: chain of work
-// - merge all maps in `env` to a single `(name -> entity)` map
-// ^ for this you need `value_type.call`
 
 
 // TODO:
-// - `static value_type::name` for better error messages
 // - have a common interface for operators, then each sub-type implements its own version
 // ^ eg. `add` is `+`, but `int + int` is `iadd`
 // - separate float32 from float64
@@ -116,6 +112,9 @@ struct value_type : type
     // TODO: by default is `eq` a bytewise compare?
     virtual value_type const *eq(value_type const *rhs) const noexcept;
     virtual value_type const *lt(value_type const *rhs) const noexcept;
+    // operator()
+    // TODO: does a call ever change the value of the calling object itself?
+    virtual value_type const *call(std::span<value_type const *> args) const noexcept;
 
     // TODO: how do you implement this on `struct`, `func`, `tuple`, etc.?
     virtual char const *name() const noexcept = 0;
@@ -174,6 +173,9 @@ inline value_type const *value_type::neg() const noexcept { return new unary_op_
 
 inline value_type const *value_type::eq(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"==", this, rhs}; }
 inline value_type const *value_type::lt(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"<", this, rhs}; }
+
+// TODO: use a custom error for this
+inline value_type const *value_type::call(std::span<value_type const *> args) const noexcept { return new unary_op_not_implemented_type{"()", this}; }
 
 struct void_type final : value_type
 {
@@ -664,6 +666,13 @@ struct func final : value_type
 {
     inline func(value_type const *ret, size_t n_params, std::unique_ptr<value_type const *[]> params) noexcept
         : ret{ret}, n_params{n_params}, params(std::move(params)) {}
+
+    inline value_type const *call(std::span<value_type const *> args) const noexcept
+    {
+        // TODO: implement
+        // TODO: typecheck the arguments
+        return ret;
+    }
 
     // TODO: print concrete type instead
     inline char const *name() const noexcept final { return "func"; }

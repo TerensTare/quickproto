@@ -60,14 +60,14 @@ struct scope final
     // TODO(maybe): move constant stuff to a separate part; they never get merged
     // ^ never mind, just merge everything to one map, implement `value_type.assign` and let it handle everything
     // ^ but in that case, how do you distinguish between struct types and struct instances? (types implement `value_type.construct`)
-    entt::dense_map<std::string_view, entt::entity, dual_hash, dual_cmp> funcs; // (name -> (mem_state, type)) mapping
+    entt::dense_map<std::string_view, entt::entity, dual_hash, dual_cmp> defs; // (name -> (mem_state, type)) mapping
     entt::dense_map<std::string_view, value_type const *, dual_hash, dual_cmp> types;
-    entt::dense_map<std::string_view, entt::entity, dual_hash, dual_cmp> vars;
     scope *parent = nullptr;
 };
 
 struct env final
 {
+    // rename these since now it's not only variables; also make sure scoping rules still work
     inline entt::entity get_var(std::string_view name) const noexcept
     {
         auto const hash = entt::hashed_string::value(name.data(), name.size());
@@ -76,14 +76,14 @@ struct env final
 
     inline void new_var(std::string_view name, entt::entity id) noexcept
     {
-        ensure(top->vars.insert({name, id}).second, "Variable redeclaration in block!");
+        ensure(top->defs.insert({name, id}).second, "Variable redeclaration in block!");
     }
 
     inline void set_var(std::string_view name, entt::entity id) noexcept
     {
         // semantics: check if existing, then write to this env
         ensure(get_var(name) != entt::null, "Variable assigned to before declaration!");
-        top->vars.insert_or_assign(name, id);
+        top->defs.insert_or_assign(name, id);
     }
 
     scope *top;
@@ -94,8 +94,8 @@ private:
         // assuming s is not null
         do
         {
-            auto iter = s->vars.find(hash);
-            if (iter != s->vars.end())
+            auto iter = s->defs.find(hash);
+            if (iter != s->defs.end())
                 return iter->second;
             s = s->parent;
         } while (s);

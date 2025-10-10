@@ -10,8 +10,10 @@
 #include "type.hpp"
 
 // TODO:
+// - evaluate the type of every node when parsing, then `const_fold` would simply check `type.is_known` and replace the node with `Const(type)`
+// - (maybe) it's a good idea to mark `Return` nodes with a component, so you can later easily jump to them to cut unused functions
 // - most of the nodes have a fixed (small) number of children, so use a smallvector instead for less dynamic allocations
-// - embed node type on id
+// - merge non-basic edges into a single component type, interpreted based on `node_op`
 // - multi-assign + multi-declare variables
 // - store nodes by hash (hash=id, but based on node kind, etc.) - called hash-cons; it also helps with constant pooling
 // - Stores are right-to-left; enforce that (maybe by just reordering `In`?)
@@ -21,22 +23,16 @@
 // ^ So when you `Proj` on `Start` you get a local variable
 // ^ for constant folding, you don't care about killing node inputs, just the users of a node
 // ^ then if a node has no users it is a dead node
-// - consider storing edges as inputs instead of just nodes, to model different kind of edges (memory, etc.)
 // - does MultiNode have many values or many inputs?
 // - Addr is just a `Proj` now; address this
 // - when visualizing, show the type of the node with `tooltip=\"\"`
 // - should loads and stores have type information in them?
 // ^ eg. `Load(from=mem_state, proj=0, as=int64_bot)` (if the value is known, the type will be lifted to have more info automatically)
-// - `ctrl` edges for control flow
 // - drop the registry for a list of storages
-// - use a custom printer for `entt::entity`
-// - try to make `users` present only if there are actual users (helps with DCE and other passes)
 // - add a `light_entity<Ts...>` to enforce component invariants
 // - also embed the op kind in each entity's id for fast checks in `peephole`
 // - (maybe): split nodes depending on type: value nodes, control flow nodes, etc...; this way you can specify more clearly the edges of nodes
 // - local variables do not need `Load`/`Store`, but globals/members do
-// - there are two types of `Proj` nodes: `Proj` on a value and `Proj` on control flow
-// ^ `Proj`s on values have input links and `Proj`s on control flow have `effect` links
 
 // DONE:
 // - [x] encode flow information in nodes such as `if`, etc.
@@ -58,6 +54,7 @@ enum class node_op : uint8_t
     Proj,      // Proj Value=[i] In=[multiNode]
     Start,     // Start - a no-op node for preserving ordering between loads/stores and for representing side effects. Also indicates the beginning of a function
     Return,    // Return Value=[n] In=[ctrl, returnNode x n]
+    Exit,      // Exit Value=[n]
 
     IfYes,  // IfYes In=[ctrlNode, condNode]
     IfNot,  // IfNot In=[ctrlNode, condNode]
@@ -124,6 +121,19 @@ struct node_inputs final
 struct effect final
 {
     entt::entity target;
+};
+
+// component
+// present only on `Phi` nodes, connects them to the corresponding `Region`
+struct region_of_phi final
+{
+    entt::entity region;
+};
+
+// internal component
+// used by dead code elimination to know which nodes to visit after a function is parsed
+struct maybe_reachable final
+{
 };
 
 template <>

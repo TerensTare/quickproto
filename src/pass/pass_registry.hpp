@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "pass/cmp_passes.hpp"
 #include "pass/const_fold.hpp"
 #include "pass/phi_fold.hpp"
 
@@ -54,6 +55,16 @@ struct pass_registry final
             }
         }
 
+        if (cmp_nodes.test(op))
+        {
+            if (auto const newn = cmp_pass.run_pass(bld, node); newn != entt::null)
+            {
+                // TODO: can you make it so that passes are ran only when a node is created? (ie. no users yet)
+                replace(node, newn);
+                return newn;
+            }
+        }
+
         return node;
     }
 
@@ -65,6 +76,9 @@ struct pass_registry final
     // phi_fold
     phi_fold_pass phi_fold_pass;
     bitset256 phi_fold_nodes = phi_fold_pass.supported_nodes();
+    // cmp_pass
+    cmp_pass cmp_pass;
+    bitset256 cmp_nodes = cmp_pass.supported_nodes();
 
 private:
     inline void replace(entt::entity oldn, entt::entity newn);
