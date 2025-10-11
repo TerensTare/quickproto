@@ -58,8 +58,16 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
         return circle_node("/");
     case node_op::CmpEq:
         return circle_node("==");
+    case node_op::CmpNe:
+        return circle_node("!=");
+    case node_op::CmpLt:
+        return circle_node("<");
     case node_op::CmpLe:
         return circle_node("<=");
+    case node_op::CmpGt:
+        return circle_node(">");
+    case node_op::CmpGe:
+        return circle_node(">=");
 
     case node_op::IfYes:
         return named_node("IfYes");

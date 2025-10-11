@@ -7,7 +7,6 @@
 #include <span>
 #include <vector>
 
-
 // TODO:
 // - have a common interface for operators, then each sub-type implements its own version
 // ^ eg. `add` is `+`, but `int + int` is `iadd`
@@ -23,7 +22,6 @@
 // - signed and unsigned integers should be separate; then you only have these types for integers
 // ^ then sized integers are for example: uint8 is `uint_range{0, 255}`
 // - maybe use a value_stack and index into it when representing types
-// - `control_flow_type`
 // - maybe handle operators using a function table, rather than letting the type handle them?
 
 struct bool_;
@@ -97,6 +95,9 @@ struct ctrl final : flow_type
 
 struct value_type : type
 {
+    // TODO: recheck this
+    virtual value_type const *assign(value_type const *rhs) const noexcept;
+
     // binary
     virtual value_type const *add(value_type const *rhs) const noexcept;
     virtual value_type const *sub(value_type const *rhs) const noexcept;
@@ -164,6 +165,8 @@ struct binary_op_not_implemented_type final : value_type
     value_type const *rhs;
 };
 
+inline value_type const *value_type::assign(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"=", this, rhs}; }
+
 inline value_type const *value_type::add(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"+", this, rhs}; }
 inline value_type const *value_type::sub(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"-", this, rhs}; }
 inline value_type const *value_type::mul(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"*", this, rhs}; }
@@ -192,6 +195,13 @@ struct void_type final : value_type
 
 struct bool_ : value_type
 {
+    inline value_type const *assign(value_type const *rhs) const noexcept
+    {
+        return rhs->as<bool_>()
+                   ? rhs
+                   : value_type::assign(rhs);
+    }
+
     inline char const *name() const noexcept final { return "bool"; }
 };
 
@@ -263,6 +273,13 @@ struct bool_bot final : bool_
 
 struct int_ : value_type
 {
+    inline value_type const *assign(value_type const *rhs) const noexcept
+    {
+        return rhs->as<int_>()
+                   ? rhs
+                   : value_type::assign(rhs);
+    }
+
     inline char const *name() const noexcept final { return "int"; }
 };
 
@@ -472,6 +489,14 @@ struct int_range final : int_
 
 struct float_ : value_type
 {
+    // TODO: recheck this
+    inline value_type const *assign(value_type const *rhs) const noexcept
+    {
+        return rhs->as<float_>()
+                   ? rhs
+                   : value_type::assign(rhs);
+    }
+
     inline char const *name() const noexcept override { return "{float}"; }
 };
 

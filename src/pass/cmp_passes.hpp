@@ -4,6 +4,10 @@
 #include "base.hpp"
 #include "pass/pass.hpp"
 
+// TODO:
+// - `a == a` does not always hold (eg. NaN)
+// ^ but what about `a != a`?
+
 // run passes on comparison nodes
 struct cmp_pass final : graph_pass
 {

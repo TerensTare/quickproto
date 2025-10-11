@@ -76,6 +76,7 @@ inline static std::unordered_map<std::string_view, token_kind> const keywords{
     {"nil", token_kind::KwNil},
     {"return", token_kind::KwReturn},
     {"true", token_kind::KwTrue},
+    {"var", token_kind::KwVar},
 };
 
 inline token scanner::next() noexcept
@@ -106,75 +107,70 @@ inline token scanner::next() noexcept
 
 inline void scanner_iter::skip_ws() noexcept
 {
-    while (true)
+    switch (*text)
     {
-    loop:
-        switch (*text)
+    case '\0':
+        return;
+
+    case '/':
+        switch (text[1])
         {
-        case '\0':
-            return;
-
         case '/':
-            ++text;
-            goto maybe_comment;
-
+            text += 2; // '//'
+            goto line_comment;
+        case '*':
+            text += 2; // '/*'
+            goto multiline_comment;
         default:
-            if (*text <= ' ')
-            {
+            return;
+        }
+
+    default:
+        if (*text <= ' ')
+        {
+            ++text;
+
+            while (*text <= ' ')
                 ++text;
 
-                while (*text <= ' ')
-                    ++text;
-            }
-            else
-                return;
+            return skip_ws();
         }
+        else
+            return;
     }
 
     return;
 
-maybe_comment:
-    switch (*text)
+line_comment:
+    while (true)
     {
-    case '/':
-        ++text;
-
-        while (true)
+        switch (*text)
         {
-            switch (*text)
-            {
-            case '\n':
-                ++text;
-                [[fallthrough]];
-            case '\0':
-                goto loop;
+        case '\n':
+            ++text;
+            [[fallthrough]];
+        case '\0':
+            return;
 
-            default:
-                ++text;
-            }
+        default:
+            ++text;
         }
-
-    case '*':
-        ++text;
-
-        while (text[1] != '\0')
-        {
-            if (*text != '*' || text[1] != '/')
-            {
-                text += 2; // TODO: can you actually move by 2?
-                continue;
-            }
-            else
-            {
-                text += 2;
-                goto loop;
-            }
-        }
-
-    default:
-        --text; // rollback the first '/'
-        return;
     }
+
+multiline_comment:
+    const char *next = nullptr;
+    while (next = strchr(text, '*'))
+    {
+        text = next + 1;
+        if (*text == '/')
+        {
+            ++text;
+            // TODO: you can merge this switch here along with the `/` check
+            return skip_ws();
+        }
+    }
+
+    text += strlen(text); // TODO: does this go to '\0'?
 }
 
 inline token_kind scanner_iter::next() noexcept

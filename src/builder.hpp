@@ -119,7 +119,7 @@ inline void prune_dead_code(builder &bld, entt::entity ret) noexcept
 
     while (!to_visit.empty())
     {
-        auto top = to_visit.back();
+        auto const top = to_visit.back();
         to_visit.pop_back();
 
         // TODO: is this ever the case that this node was visited previously?
@@ -129,6 +129,7 @@ inline void prune_dead_code(builder &bld, entt::entity ret) noexcept
         // TODO: add other links here as well
         // TODO: maybe just follow the effect and memory chain instead?
         // ^ also you can check here `visited` so that you don't push into the vector, causing a possible reallocation
+        // ^ lemma: if there is only one candidate node to add to `to_visit`, you don't need `to_visit` at all
         auto &&ins = ins_storage.get(top).nodes;
         to_visit.insert(to_visit.end(), ins.begin(), ins.end());
 

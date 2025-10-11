@@ -47,6 +47,7 @@ enum class token_kind : uint8_t
     KwNil,
     KwReturn,
     KwTrue,
+    KwVar,
 
     // Other variable-length tokens
     Integer,
