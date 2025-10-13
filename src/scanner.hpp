@@ -238,6 +238,23 @@ inline token_kind scanner_iter::next() noexcept
                    ? LessEqual
                    : Less;
 
+    case '&':
+        return eat('&')
+                   ? AndAnd
+               : eat('=') ? AndEqual
+                          : And;
+
+    case '|':
+        return eat('|')
+                   ? OrOr
+               : eat('=') ? OrEqual
+                          : Or;
+
+    case '^':
+        return eat('=')
+                   ? XorEqual
+                   : Xor;
+
     case '"':
         // TODO: error on newline
         while (*text && *text != '"')

@@ -1,13 +1,11 @@
 
 #pragma once
 
-#include <print>
-#include <string>
+#include <format>
 #include <vector>
 
-#include <entt/entity/registry.hpp>
-
-#include "type.hpp"
+#include <entt/entity/entity.hpp>
+#include "utils/smallvec.hpp"
 
 // TODO:
 // - evaluate the type of every node when parsing, then `const_fold` would simply check `type.is_known` and replace the node with `Const(type)`
@@ -17,7 +15,6 @@
 // - multi-assign + multi-declare variables
 // - store nodes by hash (hash=id, but based on node kind, etc.) - called hash-cons; it also helps with constant pooling
 // - Stores are right-to-left; enforce that (maybe by just reordering `In`?)
-// - arena-allocate builder data
 // - add a control flow edge to load/store
 // - `Start` is essentially the first `Store` in the function and also a special case of `MultiNode`
 // ^ So when you `Proj` on `Start` you get a local variable
@@ -44,6 +41,9 @@
 
 // TODO: can you fit all ops in a uint8_t?
 // TODO: specify `Out` links of each node (ie. can you link a ctrl, memory, data edge to this node?)
+
+// forward declaration
+struct type;
 
 // component
 enum class node_op : uint8_t
@@ -74,6 +74,10 @@ enum class node_op : uint8_t
     Fsub,
     Fmul,
     Fdiv,
+
+    // boolean logic
+    LogicAnd,
+    LogicOr,
 
     // TODO: simplify these to just < and ==
     CmpEq,
@@ -112,8 +116,7 @@ struct users final
 // TODO: nodes have a fixed number of inputs (except maybe call when optimized?) so you can use a `dynamic_array<T>` here probably with a small buffer for math nodes
 struct node_inputs final
 {
-    // TODO: use something better
-    std::vector<entt::entity> nodes;
+    smallvec nodes;
 };
 
 // component

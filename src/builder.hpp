@@ -1,7 +1,8 @@
 
 #pragma once
 
-#include <span>
+#include <concepts>
+#include <entt/entity/registry.hpp>
 #include "nodes.hpp"
 
 // TODO:
@@ -51,6 +52,15 @@ inline type const *type_by_op(node_op op) noexcept
 
 struct builder final
 {
+    template <typename T>
+    inline entt::entity make(T const &t) noexcept
+        requires requires {
+            { ::make(*this, t) } -> std::same_as<entt::entity>;
+        }
+    {
+        return ::make(*this, t);
+    }
+
     // invariant: The returned entity has the following components:
     // `node`
     // `node_type`
@@ -64,9 +74,6 @@ struct builder final
         return make(op, std::span(dummy, 0));
     }
 
-    // Add some kind of static checks to `op` here
-    inline entt::entity makeval(entt::entity memory, node_op op, type const *type) noexcept;
-
     // TODO: is there any node with more than 1 effect dependency?
     entt::registry reg;
 };
@@ -78,7 +85,7 @@ inline entt::entity builder::make(node_op op, std::span<entt::entity const> nins
     auto const n = reg.create();
     reg.emplace<node_op>(n, op);
     reg.emplace<node_type>(n, type_by_op(op));
-    reg.emplace<node_inputs>(n, std::vector(nins.begin(), nins.end()));
+    reg.emplace<node_inputs>(n, compress(nins));
     reg.emplace<maybe_reachable>(n);
 
     // TODO: optimize
@@ -86,17 +93,6 @@ inline entt::entity builder::make(node_op op, std::span<entt::entity const> nins
     {
         reg.get_or_emplace<users>(id).entries.push_back({n, i++});
     }
-
-    return n;
-}
-
-inline entt::entity builder::makeval(entt::entity memory, node_op op, type const *type) noexcept
-{
-    auto n = make(op);
-    reg.get<node_type>(n).type = type;
-
-    // TODO: actually set this
-    // effects[n->id] = memory;
 
     return n;
 }
@@ -113,7 +109,6 @@ inline void prune_dead_code(builder &bld, entt::entity ret) noexcept
     auto const &ins_storage = bld.reg.storage<node_inputs>();
     auto const &effects = bld.reg.storage<effect>();
 
-    // TODO: do you need to repeat this?
     std::vector<entt::entity> to_visit;
     to_visit.push_back(ret);
 

@@ -1,7 +1,9 @@
 
 #pragma once
 
+#include <print>
 #include "backends/backend.hpp"
+#include "types/all.hpp"
 
 // TODO: on hover, show the type of the node
 
@@ -68,6 +70,10 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
         return circle_node(">");
     case node_op::CmpGe:
         return circle_node(">=");
+    case node_op::LogicAnd:
+        return circle_node("And");
+    case node_op::LogicOr:
+        return circle_node("Or");
 
     case node_op::IfYes:
         return named_node("IfYes");

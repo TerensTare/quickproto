@@ -22,6 +22,15 @@ enum class token_kind : uint8_t
     Slash,      // /
     SlashEqual, // /=
 
+    And,      // &
+    AndAnd,   // &&
+    AndEqual, // &=
+    Or,       // |
+    OrOr,     // ||
+    OrEqual,  // |=
+    Xor,      // ^
+    XorEqual, // ^=
+
     Comma,     // ,
     Semicolon, // ;
     Colon,     // :

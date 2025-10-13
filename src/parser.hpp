@@ -4,13 +4,14 @@
 #include <algorithm>
 #include <charconv>
 
-#include "builder.hpp"
+#include "builder/all.hpp"
 #include "env.hpp"
 #include "scanner.hpp"
 
-#include "pass/pass_registry.hpp"
+#include "types/all.hpp"
 
 // TODO:
+// - drop `ctrl` types; they are represented with `maybe_reachable`/`unreachable`
 // - codegen a `Load`/`Store` for global variables, as these operations need to be "lazy"
 // ^ (maybe) it's best to codegen `Load`/`Store` for everything, then cut the nodes for local stuff?
 // - do you need a `memory` edge for operations that affect memory state? (then `effect` becomes `happens_after`)
@@ -62,9 +63,6 @@ var_env merge(var_env const &parent, var_env const &left, var_env const &right) 
 // - you don't really need to have a `global` env anymore; it is simply the current env and is merged as needed
 // ^ you might still need it for codegen though (eg. `global.set` vs `local.set`, etc.)
 
-// - store `return value;` in a `$return` variable and handle it at the end of a block (take special care when there are statements after `return`)
-// ^ careful that `$return` shouldn't always exist, only inside `block`s; so maybe you just return it from `block` instead?
-
 // - lemmas: in a correct program:
 // ^ a package is followed by an import or Eof
 // ^ an import is followed by an import or Eof
@@ -74,8 +72,8 @@ var_env merge(var_env const &parent, var_env const &left, var_env const &right) 
 enum class parse_prec : uint8_t
 {
     None,
-    Or,         // or
-    And,        // and
+    Or,         // ||
+    And,        // &&
     Equality,   // == !=
     Comparison, // < <= >= >
     Term,       // + -
@@ -88,6 +86,8 @@ static constexpr auto prec_table = []()
     // MSVC does not like a for loop here
     table.fill(parse_prec::None);
 
+    table[(uint8_t)token_kind::OrOr] = parse_prec::Or;
+    table[(uint8_t)token_kind::AndAnd] = parse_prec::And;
     table[(uint8_t)token_kind::EqualEqual] = parse_prec::Equality;
     table[(uint8_t)token_kind::BangEqual] = parse_prec::Equality;
     table[(uint8_t)token_kind::Greater] = parse_prec::Comparison;
@@ -102,54 +102,32 @@ static constexpr auto prec_table = []()
     return table;
 }();
 
-constexpr node_op op_node(token_kind kind) noexcept
-{
-    using enum token_kind;
-    using enum node_op;
-
-    switch (kind)
-    {
-    case Plus:
-        return Add;
-    case Minus:
-        return Sub;
-    case Star:
-        return Mul;
-    case Slash:
-        return Div;
-
-    case BangEqual:
-        return CmpNe;
-    case EqualEqual:
-        return CmpEq;
-    case Less:
-        return CmpLt;
-    case LessEqual:
-        return CmpLe;
-    case Greater:
-        return CmpGt;
-    case GreaterEqual:
-        return CmpGe;
-    }
-}
-
 struct parser final
 {
     // expr
 
-    // TODO: parse call expression in case an `Ident` is found
-    // ^ still you need to find a way to parse things such as `a.b(c)` or similar
     // call_or_self(base) ::= call(base) | base
     // ^ie. it's `base` + any possible call following it
     [[nodiscard]]
     inline entt::entity call_or_self(entt::entity base) noexcept;
 
-    // call ::= base '(' expr,*,? ')' call_or_self
+    // call(base) ::= call_or_self( base '(' expr,*,? ')' )
+    // ^ meaning this rule will parse a call, then invoke `call_or_self` with the parsed call as `base`
     [[nodiscard]]
     inline entt::entity call(entt::entity base) noexcept;
+    // primary ::= 'true'
+    //           | 'false'
+    //           | <integer>
+    //           | <unary_op> expr
+    //           | '(' expr ')'
+    //           | call_or_self(<ident>)
+    // <unary_op> ::= '!' | '-'
     [[nodiscard]]
     inline entt::entity primary() noexcept;
 
+    // expr ::= primary (<binary_op> primary)*
+    // <binary_op> ::= '||' | '&&' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '+' | '-' | '*' | '/'
+    // ^ how much is parsed by a specific call to `expr` depends on the precedence level parsed
     [[nodiscard]]
     inline entt::entity expr(parse_prec prec = parse_prec::None) noexcept;
 
@@ -216,9 +194,8 @@ struct parser final
 
     scanner scan;
     builder bld;
-    pass_registry passes{bld};
 
-    scope global{.types = global_types()};
+    scope global = global_scope();
     env env{.top = &global};
 
     entt::entity mem_state;
@@ -263,7 +240,7 @@ private:
         entt::entity const ins[]{lhs, rhs};
         auto const ret = bld.make(node_op::Phi, ins);
         (void)bld.reg.emplace<region_of_phi>(ret, region);
-        return passes.run(ret);
+        return ret; // TODO: fold the `Phi` if possible
     }
 
     // merge `lhs` and `rhs` into a new phi node if either of the nodes is different from `old` and return it, otherwise return `old`
@@ -295,7 +272,9 @@ private:
     inline token eat(token_kind kind) noexcept;
     inline token eat(std::span<token_kind const> kinds) noexcept;
 
-    inline static entt::dense_map<std::string_view, value_type const *, dual_hash, dual_cmp> global_types() noexcept;
+    inline entt::entity binary_node(token_kind kind, entt::entity lhs, entt::entity rhs) noexcept;
+
+    inline static scope global_scope() noexcept;
 };
 
 inline entt::entity parser::call_or_self(entt::entity base) noexcept
@@ -318,10 +297,10 @@ inline entt::entity parser::call(entt::entity base) noexcept
 
     // TODO: reuse this buffer storage
     std::vector<entt::entity> ins;
-    // '(' expr,*,? ')'
+    // expr,*,?
     while (scan.peek.kind != token_kind::RightParen)
     {
-        auto const arg = expr();
+        auto const arg = expr(); // expr
         ins.push_back(arg);
 
         if (scan.peek.kind != token_kind::Comma)
@@ -340,11 +319,11 @@ inline entt::entity parser::call(entt::entity base) noexcept
     // TODO: the call should probably link to the `Return` node of the called function, not the `Start`
     bld.reg.emplace<effect>(call, mem_state);
 
-    // TODO: is this correct?
+    // TODO: is this correct? (only if there is a side effect)
     mem_state = call;
 
     // TODO: inline CPS this
-    return call_or_self(call);
+    return call_or_self(call); // call_or_self(parsed)
 }
 
 inline entt::entity parser::primary() noexcept
@@ -376,18 +355,19 @@ inline entt::entity parser::primary() noexcept
 
         int64_t val{};
         std::from_chars(txt.data(), txt.data() + txt.size(), val);
-        return bld.makeval(mem_state, node_op::Const, new int_const{val});
+        return bld.make(value_node{new int_const{val}});
     }
 
     case KwFalse:
-        return bld.makeval(mem_state, node_op::Const, new bool_const{false});
+        return bld.make(value_node{new bool_const{false}});
     case KwTrue:
-        return bld.makeval(mem_state, node_op::Const, new bool_const{true});
+        return bld.make(value_node{new bool_const{true}});
 
     // TODO: don't use integer type here anymore
     case KwNil:
-        return bld.makeval(mem_state, node_op::Const, new int_const{0});
+        return bld.make(value_node{new int_const{0}});
 
+        // call_or_self(<ident>)
     case Ident:
     {
         auto const name = scan.lexeme(tok);
@@ -400,26 +380,27 @@ inline entt::entity parser::primary() noexcept
         return call_or_self(val);
     }
 
+    // '(' expr ')'
     case LeftParen:
     {
-        auto ret = expr();
-        eat(RightParen);
+        auto const ret = expr(); // expr
+        eat(RightParen);         // ')'
         // TODO: is this ok or should you wrap it?
         return ret;
     }
 
+    // '!' expr
     case Bang:
     {
-        auto sub = expr();
-        entt::entity inputs[]{sub};
-        return bld.make(node_op::UnaryNot, inputs);
+        auto const sub = expr(); // expr
+        return bld.make(unot_node{.sub = sub});
     }
 
+    // '-' expr
     case Minus:
     {
-        auto sub = expr();
-        entt::entity inputs[]{sub};
-        return bld.make(node_op::UnaryNeg, inputs);
+        auto const sub = expr();
+        return bld.make(uneg_node{.sub = sub});
     }
 
     default:
@@ -430,7 +411,7 @@ inline entt::entity parser::primary() noexcept
 
 inline entt::entity parser::expr(parse_prec prec) noexcept
 {
-    auto lhs = passes.run(primary());
+    auto lhs = primary();
 
     parse_prec rprec;
     while (prec < (rprec = prec_table[(uint8_t)scan.peek.kind]))
@@ -440,9 +421,7 @@ inline entt::entity parser::expr(parse_prec prec) noexcept
         // TODO: do you even have right-associative operators?
         auto const rhs = expr(rprec);
 
-        entt::entity const inputs[]{lhs, rhs};
-        lhs = bld.make(op_node(op), inputs);
-        lhs = passes.run(lhs);
+        lhs = binary_node(op, lhs, rhs);
     }
 
     return lhs;
@@ -490,11 +469,11 @@ inline entt::entity parser::compound_assign(std::span<token const> ids) noexcept
         token_kind::SlashEqual,
     };
 
-    auto const optok = eat(ops).kind;
+    auto const optok = eat(ops).kind; // compound_op
 
-    auto rhs = expr();
+    auto const rhs = expr(); // expr
 
-    eat(token_kind::Semicolon);
+    eat(token_kind::Semicolon); // ';'
 
     // codegen
     auto const node_op = optok == token_kind::PlusEqual
@@ -513,8 +492,9 @@ inline entt::entity parser::compound_assign(std::span<token const> ids) noexcept
     // auto const res = bld.makeval(op::Addr, int_bot::self(), {.i64 = 0});
 
     entt::entity const ins[]{env.get_var(name), rhs};
-    auto opnode = bld.make(node_op, ins);
-    opnode = passes.run(opnode);
+    auto const opnode = bld.make(node_op, ins);
+    // TODO: fold `opnode` if possible
+    // opnode = passes.run(opnode);
 
     env.set_var(name, opnode);
     return stmt();
@@ -534,10 +514,6 @@ inline entt::entity parser::post_op(std::span<token const> ids) noexcept
     eat(token_kind::Semicolon);
 
     // codegen
-    auto const node_op = optok == token_kind::PlusPlus
-                             ? node_op::Add
-                             : node_op::Sub;
-
     // TODO: do NOT use the lexeme here, use the address of the result
     auto const name = scan.lexeme(ids[0]);
 
@@ -545,13 +521,12 @@ inline entt::entity parser::post_op(std::span<token const> ids) noexcept
     // TODO: figure out the type of the node
     // auto const res = bld.makeval(mem_state, op::Addr, int_bot::self());
 
-    entt::entity const ins[]{
-        env.get_var(name),
-        bld.makeval(mem_state, node_op::Const, new int_const{1}),
-    };
+    auto const lhs = env.get_var(name);
+    auto const rhs = bld.make(value_node{new int_const{1}});
 
-    auto opnode = bld.make(node_op, ins);
-    opnode = passes.run(opnode);
+    auto const opnode = optok == token_kind::PlusPlus
+                            ? bld.make(add_node{lhs, rhs})
+                            : bld.make(sub_node{lhs, rhs});
 
     env.set_var(name, opnode);
 
@@ -921,7 +896,6 @@ inline void parser::decl() noexcept
 
 inline void parser::prog() noexcept
 {
-    // TODO: this should be passed on the `codegen_main` function to call `main` after global variables are initialized
     mem_state = bld.make(node_op::Start);
 
     decl(); // decl*
@@ -933,8 +907,8 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
 {
     // parsing
 
-    auto nametok = eat(token_kind::Ident); // name
-    auto ty = type();                      // type
+    auto const nametok = eat(token_kind::Ident); // name
+    auto const ty = type();                      // type
 
     // codegen
 
@@ -943,7 +917,7 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
     bld.reg.get<node_type>(node).type = new int_const{i};
 
     // TODO: these params should be defined in the function's block, not on global env
-    auto name = scan.lexeme(nametok);
+    auto const name = scan.lexeme(nametok);
     env.new_var(name, node);
 
     return ty;
@@ -952,7 +926,7 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
 inline value_type const *parser::type() noexcept
 {
     // TODO: parse qualifiers, etc.
-    auto name = eat(token_kind::Ident); // type
+    auto const name = eat(token_kind::Ident); // type
 
     // TODO: do a full search for the type, not just on `top`
     return env.top->types[scan.lexeme(name)];
@@ -978,9 +952,8 @@ inline void parser::codegen_main() noexcept
     mem_state = call_main;
 
     // TODO: is this correct?
-    auto const exit = bld.makeval(mem_state, node_op::Exit, new int_const{0});
-    // TODO: remove this when specified on `makeval`
-    bld.reg.get_or_emplace<effect>(exit).target = mem_state;
+    (void)bld.make(exit_node{.mem_state = mem_state, .code = 0});
+    // TODO: DCE on unused functions
 }
 
 // parsing helpers
@@ -1020,11 +993,63 @@ inline token parser::eat(std::span<token_kind const> kinds) noexcept
     fail("Unexpected token kind out of list");
 }
 
-inline entt::dense_map<std::string_view, value_type const *, dual_hash, dual_cmp> parser::global_types() noexcept
+inline entt::entity parser::binary_node(token_kind kind, entt::entity lhs, entt::entity rhs) noexcept
 {
-    entt::dense_map<std::string_view, value_type const *, dual_hash, dual_cmp> ret;
-    ret.insert({"int", int_bot::self()});
-    ret.insert({"bool", bool_bot::self()});
+    using enum token_kind;
+    using enum node_op;
+
+    switch (kind)
+    {
+    case Plus:
+        return bld.make(add_node{lhs, rhs});
+    case Minus:
+        return bld.make(sub_node{lhs, rhs});
+    case Star:
+        return bld.make(mul_node{lhs, rhs});
+    case Slash:
+        return bld.make(div_node{lhs, rhs});
+
+    case BangEqual:
+        return bld.make(isne_node{lhs, rhs});
+    case EqualEqual:
+        return bld.make(iseq_node{lhs, rhs});
+    case Less:
+        return bld.make(islt_node{lhs, rhs});
+    case LessEqual:
+        return bld.make(isle_node{lhs, rhs});
+    case Greater:
+        return bld.make(isgt_node{lhs, rhs});
+    case GreaterEqual:
+        return bld.make(isge_node{lhs, rhs});
+
+    case AndAnd:
+        return bld.make(and_node{lhs, rhs});
+    case OrOr:
+        return bld.make(or_node{lhs, rhs});
+
+    default:
+        std::unreachable();
+        return entt::null;
+    }
+}
+
+inline scope parser::global_scope() noexcept
+{
+    // TODO: eventually this can be replaced for an implicit `import "builtin"`
+
+    // defs
+    entt::dense_map<std::string_view, entt::entity, dual_hash, dual_cmp> defs;
+    // TODO: add built-in functions, such as `print`
+
+    // types
+    entt::dense_map<std::string_view, value_type const *, dual_hash, dual_cmp> types;
+    types.insert({"int", int_bot::self()});
+    types.insert({"bool", bool_bot::self()});
     // TODO: more built-in types
-    return ret;
+
+    return scope{
+        .defs = defs,
+        .types = types,
+        .parent = nullptr,
+    };
 }
