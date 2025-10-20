@@ -139,7 +139,7 @@ inline void scanner_iter::skip_ws() noexcept
             return;
     }
 
-    return;
+    return; // just in case
 
 line_comment:
     while (true)
@@ -165,7 +165,6 @@ multiline_comment:
         if (*text == '/')
         {
             ++text;
-            // TODO: you can merge this switch here along with the `/` check
             return skip_ws();
         }
     }

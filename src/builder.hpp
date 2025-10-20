@@ -6,6 +6,13 @@
 #include "nodes.hpp"
 
 // TODO:
+/*
+    scope-based tiered visibility marking:
+    - reachable: exported names and everything left by DCE
+    - global: global variables/constants, functions, etc., subject to DCE after whole file is parsed
+    - maybe_reachable: local declarations inside a function, subject to function-local DCE
+    - unreachable, everything cut by DCE, or following a control flow statement (`return`, `continue`, `break`)
+*/
 // - memory optimizations:
 // ^ optimized memory layout
 // ^ allocate everything on an allocator, keep builder and graph trivial
@@ -14,7 +21,7 @@
 // - move passes to `builder` instead of `parser` and run on each node parsed
 // - build-from-blueprint style for less error-prone code + it might help with defining passes
 
-inline type const *type_by_op(node_op op) noexcept
+inline value_type const *type_by_op(node_op op) noexcept
 {
     switch (op)
     {
@@ -42,16 +49,45 @@ inline type const *type_by_op(node_op op) noexcept
     case node_op::IfYes:
     case node_op::IfNot:
     case node_op::Region:
-        return ctrl::self();
+        // TODO: figure this out
 
         // HACK: figure each node out instead
     default:
-        return bot::self();
+        return int_bot::self();
     }
 }
 
+using tag_storage = std::remove_cvref_t<decltype(std::declval<entt::registry>().storage<void>())>;
+
+// TODO: ensure `push` only lowers visibility and `pop` only increases with debug checks
+enum class visibility : entt::id_type
+{
+    // TODO: this is out-of-order compared to what follows; the first one should be `global` and this is -1
+    reachable = entt::hashed_string::value("reachable"),
+    // global nodes, subject to dead code elimination after the whole file is parsed
+    global = entt::hashed_string::value("global"),
+    maybe_reachable = entt::hashed_string::value("maybe_reachable"),
+    unreachable = entt::hashed_string::value("unreachable"),
+};
+
+// TODO: store this on scopes instead
+struct scope_visibility final
+{
+    visibility name;
+    tag_storage *pool;
+    scope_visibility *prev = nullptr;
+};
+
 struct builder final
 {
+    builder()
+        : global{
+              .name = visibility::global,
+              .pool = &reg.storage<void>((entt::id_type)visibility::global),
+          }
+    {
+    }
+
     template <typename T>
     inline entt::entity make(T const &t) noexcept
         requires requires {
@@ -74,8 +110,25 @@ struct builder final
         return make(op, std::span(dummy, 0));
     }
 
-    // TODO: is there any node with more than 1 effect dependency?
+    // TODO: debug_ensure that the given visibility is below current level
+    template <visibility Vis>
+    inline void push_vis(scope_visibility &scope)
+    {
+        scope = {
+            .name = Vis,
+            .pool = &reg.storage<void>((entt::id_type)Vis),
+            .prev = scopes,
+        };
+        scopes = &scope;
+    }
+
+    // TODO: ensure not null
+    inline void pop_vis() { scopes = scopes->prev; }
+
+    // TODO: is there any node (other than `Region`) with more than 1 effect dependency?
     entt::registry reg;
+    scope_visibility global;
+    scope_visibility *scopes = &global;
 };
 
 inline entt::entity builder::make(node_op op, std::span<entt::entity const> nins) noexcept
@@ -86,7 +139,7 @@ inline entt::entity builder::make(node_op op, std::span<entt::entity const> nins
     reg.emplace<node_op>(n, op);
     reg.emplace<node_type>(n, type_by_op(op));
     reg.emplace<node_inputs>(n, compress(nins));
-    reg.emplace<maybe_reachable>(n);
+    scopes->pool->emplace(n);
 
     // TODO: optimize
     for (uint32_t i{}; auto id : nins)
@@ -97,14 +150,11 @@ inline entt::entity builder::make(node_op op, std::span<entt::entity const> nins
     return n;
 }
 
+// TODO: this again, but for global nodes
 inline void prune_dead_code(builder &bld, entt::entity ret) noexcept
 {
-    struct reachable final
-    {
-    };
-
-    auto &&new_nodes = bld.reg.storage<maybe_reachable>();
-    auto &&visited = bld.reg.storage<reachable>();
+    auto &&new_nodes = bld.reg.storage<void>((entt::id_type)visibility::maybe_reachable);
+    auto &&visited = bld.reg.storage<void>((entt::id_type)visibility::reachable);
 
     auto const &ins_storage = bld.reg.storage<node_inputs>();
     auto const &effects = bld.reg.storage<effect>();
@@ -135,8 +185,16 @@ inline void prune_dead_code(builder &bld, entt::entity ret) noexcept
     }
 
     // TODO: these are unreachable, so maybe leave a warning for significant nodes? (functions, etc.)
-    auto to_cut_view = entt::basic_view{std::tie(new_nodes), std::tie(visited)};
-    bld.reg.destroy(to_cut_view.begin(), to_cut_view.end());
+    {
+        auto to_cut_view = entt::basic_view{std::tie(new_nodes), std::tie(visited)};
+        bld.reg.destroy(to_cut_view.begin(), to_cut_view.end());
+    }
+
+    // TODO: is this correct?
+    {
+        auto &&to_cut = bld.reg.storage<void>((entt::id_type)visibility::unreachable);
+        bld.reg.destroy(to_cut.begin(), to_cut.end());
+    }
 
     new_nodes.clear();
 }

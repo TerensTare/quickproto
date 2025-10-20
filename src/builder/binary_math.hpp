@@ -40,8 +40,8 @@ inline entt::entity make(builder &bld, add_node add) noexcept
         return bld.make(node_op::Add, ins);
     }
 
-    auto const lty = bld.reg.get<node_type const>(add.lhs).type->as<value_type>();
-    auto const rty = bld.reg.get<node_type const>(add.rhs).type->as<value_type>();
+    auto const lty = bld.reg.get<node_type const>(add.lhs).type;
+    auto const rty = bld.reg.get<node_type const>(add.rhs).type;
 
     auto const newty = lty->add(rty);
     return bld.make(value_node{newty});
@@ -57,8 +57,8 @@ inline entt::entity make(builder &bld, sub_node sub) noexcept
         return bld.make(node_op::Sub, ins);
     }
 
-    auto const lty = bld.reg.get<node_type const>(sub.lhs).type->as<value_type>();
-    auto const rty = bld.reg.get<node_type const>(sub.rhs).type->as<value_type>();
+    auto const lty = bld.reg.get<node_type const>(sub.lhs).type;
+    auto const rty = bld.reg.get<node_type const>(sub.rhs).type;
 
     auto const newty = lty->sub(rty);
     return bld.make(value_node{newty});
@@ -74,8 +74,8 @@ inline entt::entity make(builder &bld, mul_node mul) noexcept
         return bld.make(node_op::Mul, ins);
     }
 
-    auto const lty = bld.reg.get<node_type const>(mul.lhs).type->as<value_type>();
-    auto const rty = bld.reg.get<node_type const>(mul.rhs).type->as<value_type>();
+    auto const lty = bld.reg.get<node_type const>(mul.lhs).type;
+    auto const rty = bld.reg.get<node_type const>(mul.rhs).type;
 
     auto const newty = lty->mul(rty);
     return bld.make(value_node{newty});
@@ -91,8 +91,8 @@ inline entt::entity make(builder &bld, div_node div) noexcept
         return bld.make(node_op::Add, ins);
     }
 
-    auto const lty = bld.reg.get<node_type const>(div.lhs).type->as<value_type>();
-    auto const rty = bld.reg.get<node_type const>(div.rhs).type->as<value_type>();
+    auto const lty = bld.reg.get<node_type const>(div.lhs).type;
+    auto const rty = bld.reg.get<node_type const>(div.rhs).type;
 
     auto const newty = lty->div(rty);
     return bld.make(value_node{newty});

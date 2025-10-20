@@ -1,23 +1,23 @@
 
 #pragma once
 
-#include "types/type.hpp"
+#include "types/value.hpp"
 
-// TODO: this should be a `value_type`
-struct ptr final : type
+// TODO: implement
+struct ptr final : value_type
 {
-    inline static ptr const *not_nil() noexcept
-    {
-        static ptr ty{};
-        return &ty;
-    }
+//     inline static ptr const *not_nil() noexcept
+//     {
+//         static ptr ty{};
+//         return &ty;
+//     }
 
-    inline static ptr const *nil() noexcept
-    {
-        static ptr ty{};
-        return &ty;
-    }
+//     inline static ptr const *nil() noexcept
+//     {
+//         static ptr ty{};
+//         return &ty;
+//     }
 
-private:
-    explicit ptr() noexcept {}
+// private:
+//     explicit ptr() noexcept {}
 };

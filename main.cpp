@@ -8,11 +8,14 @@
 // - visual debugger with tunable steppable vs non-steppable coroutines for compiler passes
 // - DLL plugins for compilation phases
 // - lemma: now that you have memory ordering; any operation that occurs in a `Store` before being connected to the main `State` is const-foldable (but not the only case)
+// - more build flags:
+// ^ option to specify name of passes to run; also presets with certain passes such as opt(1), opt(2), debug or profile
+// ^ deduce backend based on `-o <out-name>.<ext>`
+
+// DONE:
 // - peephole nodes during parsing, not after function parsed
 // ^ because peephole only affects a node and its children
 // ^ so add overload to `builder.make` that peepholes for you
-// - option to specify name of passes to run; also presets with certain passes such as opt(1), opt(2), debug or profile
-// ^ deduce backend based on `-o <out-name>.<ext>`
 
 struct cmd_args final
 {

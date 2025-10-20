@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <entt/container/dense_map.hpp>
 #include "types/bool.hpp"
 
 struct int_ : value_type
@@ -128,7 +129,14 @@ struct int_bot final : int_
 
 struct int_const final : int_
 {
-    explicit int_const(int64_t n) noexcept : n{n} {}
+    inline static int_const const *value(int64_t n) noexcept
+    {
+        // TODO: use something more optimal, remove caching once you get "in-place" types
+        static entt::dense_map<int64_t, std::unique_ptr<int_const const>, std::identity> cache;
+        if (auto iter = cache.find(n); iter != cache.end())
+            return iter->second.get();
+        return cache.insert({n, std::unique_ptr<int_const>(new int_const{n})}).first->second.get();
+    }
 
     // impl value_type
     inline value_type const *add(value_type const *rhs) const noexcept
@@ -206,6 +214,9 @@ struct int_const final : int_
     }
 
     int64_t n;
+
+private:
+    explicit int_const(int64_t n) noexcept : n{n} {}
 };
 
 // TODO: two or more possible ranges (eg. [-5, -3] to [3, 5])

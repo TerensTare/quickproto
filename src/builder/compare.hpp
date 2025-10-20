@@ -4,8 +4,6 @@
 #include "builder/value.hpp"
 #include "types/bool.hpp"
 
-// TODO: `value_type::not_equal`, etc. as non-virtual functions
-
 struct iseq_node final
 {
     entt::entity lhs, rhs;
@@ -49,8 +47,8 @@ inline entt::entity make(builder &bld, iseq_node eq) noexcept
         return bld.make(node_op::CmpEq, ins);
     }
 
-    auto const lty = bld.reg.get<node_type const>(eq.lhs).type->as<value_type>();
-    auto const rty = bld.reg.get<node_type const>(eq.rhs).type->as<value_type>();
+    auto const lty = bld.reg.get<node_type const>(eq.lhs).type;
+    auto const rty = bld.reg.get<node_type const>(eq.rhs).type;
 
     auto const newty = lty->eq(rty);
     return bld.make(value_node{newty});
@@ -69,8 +67,8 @@ inline entt::entity make(builder &bld, isne_node ne) noexcept
         return bld.make(node_op::CmpNe, ins);
     }
 
-    auto const lty = bld.reg.get<node_type const>(ne.lhs).type->as<value_type>();
-    auto const rty = bld.reg.get<node_type const>(ne.rhs).type->as<value_type>();
+    auto const lty = bld.reg.get<node_type const>(ne.lhs).type;
+    auto const rty = bld.reg.get<node_type const>(ne.rhs).type;
 
     auto const newty = lty->ne(rty);
     return bld.make(value_node{newty});
@@ -89,8 +87,8 @@ inline entt::entity make(builder &bld, islt_node lt) noexcept
         return bld.make(node_op::CmpLt, ins);
     }
 
-    auto const lty = bld.reg.get<node_type const>(lt.lhs).type->as<value_type>();
-    auto const rty = bld.reg.get<node_type const>(lt.rhs).type->as<value_type>();
+    auto const lty = bld.reg.get<node_type const>(lt.lhs).type;
+    auto const rty = bld.reg.get<node_type const>(lt.rhs).type;
 
     auto const newty = lty->lt(rty); // TODO: set the memory node
     return bld.make(value_node{newty});
@@ -109,8 +107,8 @@ inline entt::entity make(builder &bld, isle_node le) noexcept
         return bld.make(node_op::CmpNe, ins);
     }
 
-    auto const lty = bld.reg.get<node_type const>(le.lhs).type->as<value_type>();
-    auto const rty = bld.reg.get<node_type const>(le.rhs).type->as<value_type>();
+    auto const lty = bld.reg.get<node_type const>(le.lhs).type;
+    auto const rty = bld.reg.get<node_type const>(le.rhs).type;
 
     auto const newty = lty->le(rty);
     return bld.make(value_node{newty});
@@ -129,8 +127,8 @@ inline entt::entity make(builder &bld, isgt_node gt) noexcept
         return bld.make(node_op::CmpNe, ins);
     }
 
-    auto const lty = bld.reg.get<node_type const>(gt.lhs).type->as<value_type>();
-    auto const rty = bld.reg.get<node_type const>(gt.rhs).type->as<value_type>();
+    auto const lty = bld.reg.get<node_type const>(gt.lhs).type;
+    auto const rty = bld.reg.get<node_type const>(gt.rhs).type;
 
     auto const newty = lty->gt(rty);
     return bld.make(value_node{newty});
@@ -149,8 +147,8 @@ inline entt::entity make(builder &bld, isge_node ge) noexcept
         return bld.make(node_op::CmpNe, ins);
     }
 
-    auto const lty = bld.reg.get<node_type const>(ge.lhs).type->as<value_type>();
-    auto const rty = bld.reg.get<node_type const>(ge.rhs).type->as<value_type>();
+    auto const lty = bld.reg.get<node_type const>(ge.lhs).type;
+    auto const rty = bld.reg.get<node_type const>(ge.rhs).type;
 
     auto const newty = lty->ge(rty);
     return bld.make(value_node{newty});

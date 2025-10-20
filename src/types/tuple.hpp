@@ -28,7 +28,7 @@ struct tuple_n : tuple
     // inline type const *meet(type const *rhs) const noexcept
     // {
     //     // TODO: return something better here
-    //     if (!rhs->as<value_type>())
+    //     if (!rhs)
     //         return nullptr;
 
     //     if (auto ptr = rhs->as<tuple_n>(); ptr && ptr->n == n)
@@ -37,7 +37,7 @@ struct tuple_n : tuple
     //         auto new_tuple = std::make_unique_for_overwrite<value_type const *[]>(n);
     //         for (size_t i{}; i < n; ++i)
     //         {
-    //             new_tuple[i] = sub[i]->meet(ptr->sub[i])->as<value_type>();
+    //             new_tuple[i] = sub[i]->meet(ptr->sub[i]);
     //         }
 
     //         return new tuple_n{n, std::move(new_tuple)};

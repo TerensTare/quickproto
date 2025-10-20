@@ -62,7 +62,7 @@ struct scope final
     // ^ but in that case, how do you distinguish between struct types and struct instances? (types implement `value_type.construct`)
     entt::dense_map<std::string_view, entt::entity, dual_hash, dual_cmp> defs; // (name -> (mem_state, type)) mapping
     entt::dense_map<std::string_view, value_type const *, dual_hash, dual_cmp> types;
-    scope *parent = nullptr;
+    scope *prev = nullptr;
 };
 
 struct env final
@@ -97,7 +97,7 @@ private:
             auto iter = s->defs.find(hash);
             if (iter != s->defs.end())
                 return iter->second;
-            s = s->parent;
+            s = s->prev;
         } while (s);
 
         return entt::null;

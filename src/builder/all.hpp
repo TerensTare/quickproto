@@ -10,3 +10,4 @@
 
 // TODO:
 // - figure out how to have runtime-customizable peepholes with this.
+// - do you need to tail-call `make` on nodes where peephole produced a new node?

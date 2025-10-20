@@ -5,6 +5,7 @@
 #include <span>
 
 #include <entt/entity/fwd.hpp>
+#include "utils/stacklist.hpp"
 
 struct smallvec final
 {
@@ -26,4 +27,17 @@ inline smallvec compress(std::span<entt::entity const> vec) noexcept
     std::copy_n(vec.data(), vec.size(), entries.get());
 
     return {.n = vec.size(), .entries = std::move(entries)};
+}
+
+// Transform a `stacklist` to a smallvec. Make sure `n` is the number of elements you want to copy to your new smallvec
+inline smallvec compress(stacklist<entt::entity> const *list, size_t n) noexcept
+{
+    auto entries = std::make_unique_for_overwrite<entt::entity[]>(n);
+    for (size_t i{}; i < n; ++i)
+    {
+        entries[i] = list->value;
+        list = list->prev;
+    }
+
+    return {.n = n, .entries = std::move(entries)};
 }

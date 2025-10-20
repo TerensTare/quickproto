@@ -43,7 +43,7 @@
 // TODO: specify `Out` links of each node (ie. can you link a ctrl, memory, data edge to this node?)
 
 // forward declaration
-struct type;
+struct value_type;
 
 // component
 enum class node_op : uint8_t
@@ -97,7 +97,7 @@ enum class node_op : uint8_t
 // HACK: use a non-polymorphic C++ type to represent node type
 struct node_type final
 {
-    ::type const *type = nullptr;
+    value_type const *type = nullptr;
 };
 
 struct users final
@@ -133,11 +133,12 @@ struct region_of_phi final
     entt::entity region;
 };
 
-// internal component
-// used by dead code elimination to know which nodes to visit after a function is parsed
-struct maybe_reachable final
-{
-};
+// extra components:
+// `storage<void>("maybe_reachable"_hs) - this node might be reachable, will be determined later by dead code elimination once the function is parsed
+// `storage<void>("reachable"_hs) - this node won't be visited by dead code elimination
+// 'storage<void>("unreachable"_hs) - this node will be cut by dead code elimination
+
+// TODO: mark globals as `reachable`
 
 template <>
 struct std::formatter<entt::entity, char> final

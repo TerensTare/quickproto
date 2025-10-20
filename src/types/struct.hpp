@@ -1,8 +1,9 @@
 
 #pragma once
 
-#include "types/type.hpp"
+#include "types/value.hpp"
 
-struct struct_ : type
+// TODO: implement
+struct struct_ : value_type
 {
 };

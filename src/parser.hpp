@@ -11,7 +11,6 @@
 #include "types/all.hpp"
 
 // TODO:
-// - drop `ctrl` types; they are represented with `maybe_reachable`/`unreachable`
 // - codegen a `Load`/`Store` for global variables, as these operations need to be "lazy"
 // ^ (maybe) it's best to codegen `Load`/`Store` for everything, then cut the nodes for local stuff?
 // - do you need a `memory` edge for operations that affect memory state? (then `effect` becomes `happens_after`)
@@ -206,6 +205,9 @@ private:
     // i is the index of the parameter in the function declaration (used by the Proj node emitted for the parameter)
     inline value_type const *param_decl(int64_t i) noexcept;
 
+    // expr,*,? term
+    inline smallvec expr_list(token_kind term) noexcept;
+
     // type
 
     inline value_type const *type() noexcept;
@@ -245,6 +247,7 @@ private:
 
     // merge `lhs` and `rhs` into a new phi node if either of the nodes is different from `old` and return it, otherwise return `old`
     // TODO: if no `else` branch, `rhs` should be `old`
+    // TODO: move this on the builder API
     inline entt::entity phi(entt::entity old, entt::entity lhs, entt::entity rhs) noexcept
     {
         auto const l = lhs != old, r = rhs != old;
@@ -294,22 +297,8 @@ inline entt::entity parser::call(entt::entity base) noexcept
     // parsing
 
     scan.next(); // '('
-
-    // TODO: reuse this buffer storage
-    std::vector<entt::entity> ins;
-    // expr,*,?
-    while (scan.peek.kind != token_kind::RightParen)
-    {
-        auto const arg = expr(); // expr
-        ins.push_back(arg);
-
-        if (scan.peek.kind != token_kind::Comma)
-            break;
-        scan.next(); // ,
-    }
-
-    eat(token_kind::RightParen); // )
-    ins.push_back(base);
+    // TODO: add `base` to the parameters list or maybe as a special node
+    auto ins = expr_list(token_kind::RightParen); // expr,*,?)
 
     // codegen
 
@@ -355,7 +344,7 @@ inline entt::entity parser::primary() noexcept
 
         int64_t val{};
         std::from_chars(txt.data(), txt.data() + txt.size(), val);
-        return bld.make(value_node{new int_const{val}});
+        return bld.make(value_node{int_const::value(val)});
     }
 
     case KwFalse:
@@ -365,7 +354,7 @@ inline entt::entity parser::primary() noexcept
 
     // TODO: don't use integer type here anymore
     case KwNil:
-        return bld.make(value_node{new int_const{0}});
+        return bld.make(value_node{int_const::value(0)});
 
         // call_or_self(<ident>)
     case Ident:
@@ -522,7 +511,7 @@ inline entt::entity parser::post_op(std::span<token const> ids) noexcept
     // auto const res = bld.makeval(mem_state, op::Addr, int_bot::self());
 
     auto const lhs = env.get_var(name);
-    auto const rhs = bld.make(value_node{new int_const{1}});
+    auto const rhs = bld.make(value_node{int_const::value(1)});
 
     auto const opnode = optok == token_kind::PlusPlus
                             ? bld.make(add_node{lhs, rhs})
@@ -633,6 +622,7 @@ inline entt::entity parser::control_flow(token_kind which) noexcept
     if (scan.peek.kind != token_kind::Semicolon)
     {
         auto where = eat(token_kind::Ident); // <ident>?
+        // TODO: implement
     }
 
     eat(token_kind::Semicolon); // ;
@@ -642,8 +632,15 @@ inline entt::entity parser::control_flow(token_kind which) noexcept
     // TODO: implement
     // TODO: check that this is inside a `for`/`switch`/etc.
 
+    scope_visibility vis;
+    bld.push_vis<visibility::unreachable>(vis);
+
     // TODO: unreachable code
+    // TODO: tail-call this instead (`unreachable_stmt(return_)`)
     (void)stmt();
+
+    bld.pop_vis();
+
     return entt::null;
 }
 
@@ -652,39 +649,32 @@ inline entt::entity parser::return_stmt() noexcept
     // parsing
     eat(token_kind::KwReturn); // 'return'
 
-    std::vector<entt::entity> outs;
+    auto outs = expr_list(token_kind::Semicolon); // expr,*,?;
 
-    if (scan.peek.kind != token_kind::Semicolon)
-    {
-        outs.push_back(expr()); // expr
-
-        while (scan.peek.kind == token_kind::Comma)
-        {
-            scan.next();            // ,
-            outs.push_back(expr()); // expr
-        }
-    }
-
-    eat(token_kind::Semicolon); // ;
+    scope_visibility vis;
+    bld.push_vis<visibility::unreachable>(vis);
 
     // codegen
     // NOTE: everything after `return` is unreachable code, so address that with a warning or something
+    // TODO: tail-call this instead (`unreachable_stmt(return_)`)
     (void)stmt();
 
+    bld.pop_vis();
+
     // TODO: return all values
-    return (outs.size() == 0) ? (entt::entity)entt::null : outs[0];
+    return (outs.n == 0) ? (entt::entity)entt::null : outs[0];
 }
 
 inline entt::entity parser::block(auto &&then) noexcept
 {
     // TODO: figure out merging with parent
-    scope block_env{.parent = env.top};
+    scope block_env{.prev = env.top};
     env.top = &block_env;
 
     eat(token_kind::LeftBrace); // {
     auto ret = stmt();          // stmt*}
 
-    env.top = env.top->parent;
+    env.top = env.top->prev;
     return then(&block_env, ret);
 }
 
@@ -914,13 +904,39 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
 
     // TODO: recheck this
     auto const node = bld.make(node_op::Proj, std::span(&mem_state, 1));
-    bld.reg.get<node_type>(node).type = new int_const{i};
+    bld.reg.get<node_type>(node).type = int_const::value(i);
 
     // TODO: these params should be defined in the function's block, not on global env
     auto const name = scan.lexeme(nametok);
     env.new_var(name, node);
 
     return ty;
+}
+
+inline smallvec parser::expr_list(token_kind term) noexcept
+{
+    auto parse_arguments = [&](auto &&self, stacklist<entt::entity> *ins, int list_size = 0) -> smallvec
+    {
+        // TODO: is the control flow correct here?
+        if (scan.peek.kind != term)
+        {
+            auto const arg = expr(); // expr
+            stacklist node{.value = arg, .prev = ins};
+            ins = &node;
+            ++list_size;
+
+            if (scan.peek.kind == token_kind::Comma)
+            {
+                scan.next(); // ','
+                return self(self, ins, list_size);
+            }
+        }
+
+        eat(term); // term
+        return compress(ins, list_size);
+    };
+
+    return parse_arguments(parse_arguments, nullptr, 0);
 }
 
 inline value_type const *parser::type() noexcept
@@ -1050,6 +1066,6 @@ inline scope parser::global_scope() noexcept
     return scope{
         .defs = defs,
         .types = types,
-        .parent = nullptr,
+        .prev = nullptr,
     };
 }
