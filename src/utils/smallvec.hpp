@@ -7,6 +7,8 @@
 #include <entt/entity/fwd.hpp>
 #include "utils/stacklist.hpp"
 
+// TODO: rename to `dynarray`
+
 struct smallvec final
 {
     inline entt::entity &operator[](size_t i) noexcept { return entries[i]; }

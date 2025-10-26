@@ -48,7 +48,9 @@ private:
 
 struct scanner_iter final
 {
+    template <bool InsertSemicolon>
     inline void skip_ws() noexcept;
+
     inline token_kind next() noexcept;
 
     constexpr bool eat(char c) noexcept
@@ -79,25 +81,51 @@ inline static std::unordered_map<std::string_view, token_kind> const keywords{
     {"var", token_kind::KwVar},
 };
 
+inline bool auto_semicolon(token_kind kind)
+{
+    switch (kind)
+    {
+    // TODO: float + any kind of literal
+    case token_kind::Integer:
+    case token_kind::String:
+    case token_kind::Ident:
+    case token_kind::KwTrue:
+    case token_kind::KwFalse:
+    case token_kind::KwNil:
+    case token_kind::KwBreak:
+    case token_kind::KwContinue:
+    case token_kind::KwReturn:
+    case token_kind::PlusPlus:
+    case token_kind::MinusMinus:
+    case token_kind::RightParen:
+    case token_kind::RightBrace:
+        // TODO: rightBracket
+        return true;
+
+    default:
+        return false;
+    }
+}
+
 inline token scanner::next() noexcept
 {
     auto const old = peek;
 
-    auto start = peek.finish();
+    auto iter = scanner_iter{text + peek.finish()};
+    auto_semicolon(old.kind)
+        ? iter.skip_ws<true>()
+        : iter.skip_ws<false>();
 
-    auto iter = scanner_iter{text + start};
-    iter.skip_ws();
-
-    start = uint32_t(iter.text - text);
-
+    auto const start = uint32_t(iter.text - text);
     auto const next = iter.next();
+
     peek = token{
         .kind = next,
         .start = start,
         .len = uint32_t(iter.text - text) - start,
     };
 
-    if (auto iter = keywords.find(lexeme(peek)); iter != keywords.end())
+    if (auto const iter = keywords.find(lexeme(peek)); iter != keywords.end())
     {
         peek.kind = iter->second;
     }
@@ -105,6 +133,7 @@ inline token scanner::next() noexcept
     return old;
 }
 
+template <bool InsertSemicolon>
 inline void scanner_iter::skip_ws() noexcept
 {
     switch (*text)
@@ -126,14 +155,30 @@ inline void scanner_iter::skip_ws() noexcept
         }
 
     default:
+        if constexpr (InsertSemicolon)
+        {
+            // automatic semicolon insertion
+            if (*text == '\n')
+                return;
+        }
+
         if (*text <= ' ')
         {
             ++text;
 
             while (*text <= ' ')
-                ++text;
+            {
+                if constexpr (InsertSemicolon)
+                {
+                    // automatic semicolon insertion
+                    if (*text == '\n')
+                        return;
+                }
 
-            return skip_ws();
+                ++text;
+            }
+
+            return skip_ws<InsertSemicolon>();
         }
         else
             return;
@@ -147,8 +192,17 @@ line_comment:
         switch (*text)
         {
         case '\n':
-            ++text;
-            [[fallthrough]];
+            // automatic semicolon insertion
+            if constexpr (InsertSemicolon)
+                return;
+
+            else
+            {
+                ++text;
+                // invariant: this is unreachable when `InsertSemicolon` is `true`
+                return skip_ws<false>();
+            }
+
         case '\0':
             return;
 
@@ -165,7 +219,7 @@ multiline_comment:
         if (*text == '/')
         {
             ++text;
-            return skip_ws();
+            return skip_ws<InsertSemicolon>();
         }
     }
 
@@ -209,6 +263,8 @@ inline token_kind scanner_iter::next() noexcept
 
     case ',':
         return Comma;
+
+    case '\n': // if this is hit, assume automatic semicolon insertion
     case ';':
         return Semicolon;
 

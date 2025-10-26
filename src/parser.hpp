@@ -11,6 +11,8 @@
 #include "types/all.hpp"
 
 // TODO:
+// - most calls to block need to be followed by a semicolon, except for the block after an `if` and before an `else`
+// - find a way to avoid needing trailing newline on files (expected Semicolon but got Eof)
 // - codegen a `Load`/`Store` for global variables, as these operations need to be "lazy"
 // ^ (maybe) it's best to codegen `Load`/`Store` for everything, then cut the nodes for local stuff?
 // - do you need a `memory` edge for operations that affect memory state? (then `effect` becomes `happens_after`)
@@ -147,7 +149,7 @@ struct parser final
     [[nodiscard]]
     inline entt::entity post_op(std::span<token const> ids) noexcept;
 
-    // 'if' expr block ('else' ( if_stmt | block ))? stmt
+    // 'if' expr block ('else' ( if_stmt | block ))? ';' stmt
     [[nodiscard]]
     inline entt::entity if_stmt() noexcept;
     // 'for' expr block stmt
@@ -182,7 +184,7 @@ struct parser final
 
     // decl
 
-    // 'func' <ident> '(' param_decl,*, ')' type? block decl
+    // 'func' <ident> '(' param_decl,*, ')' type? block ';' decl
     inline void func_decl() noexcept;
     // 'var' <ident> type '=' expr ';' decl
     inline void var_decl() noexcept;
@@ -230,19 +232,6 @@ private:
         // - spawn a Region node here that links to the if/else branches or just the `If`
         // ^ also take care to handle multiple if-else case
         // - spawn a Phi node for merging values
-    }
-
-    // `phi`, but used for `return` nodes
-    // TODO: return one entity per expr in return
-    inline entt::entity return_phi(entt::entity region, entt::entity lhs, entt::entity rhs) noexcept
-    {
-        // TODO: handle case when either branch is null
-        // TODO: handle multiple returns
-        // TODO: ensure number of expr matches on both
-        entt::entity const ins[]{lhs, rhs};
-        auto const ret = bld.make(node_op::Phi, ins);
-        (void)bld.reg.emplace<region_of_phi>(ret, region);
-        return ret; // TODO: fold the `Phi` if possible
     }
 
     // merge `lhs` and `rhs` into a new phi node if either of the nodes is different from `old` and return it, otherwise return `old`
@@ -317,6 +306,7 @@ inline entt::entity parser::call(entt::entity base) noexcept
 
 inline entt::entity parser::primary() noexcept
 {
+    // TODO: CPS the `expr` calls here, repeat for `call` and `call_or_self`, etc.
     using enum token_kind;
 
     // parsing
@@ -344,6 +334,7 @@ inline entt::entity parser::primary() noexcept
 
         int64_t val{};
         std::from_chars(txt.data(), txt.data() + txt.size(), val);
+        // HACK: figure out actual int size
         return bld.make(value_node{int_const::value(val)});
     }
 
@@ -563,6 +554,8 @@ inline entt::entity parser::if_stmt() noexcept
                            ? if_stmt()
                            : block([&](scope const *else_env, entt::entity else_ret)
                                    {
+                                       eat(token_kind::Semicolon); // ';'
+
                                        mem_state = region(then_state, mem_state);
 
                                        // TODO: all this is common on both branches
@@ -573,7 +566,7 @@ inline entt::entity parser::if_stmt() noexcept
                                        // TODO: if either `if` or `else` has a return, codegen a phi node and return it
                                        // TODO: is this correct?
                                        // TODO: `phi` should merge the children of `return` nodes
-                                       auto const merge_ret = return_phi(mem_state, then_ret, else_ret);
+                                       auto const merge_ret = bld.make(return_phi{mem_state, then_ret, else_ret});
 
                                        // TODO: parse after merging nodes
                                        // TODO: this should be yet another branch, marked as `if(false)` ie. `~ctrl`
@@ -584,6 +577,8 @@ inline entt::entity parser::if_stmt() noexcept
             }
             else
             {
+                eat(token_kind::Semicolon); // ';'
+
                 mem_state = region(then_state, mem_state);
 
                 // TODO: implement
@@ -591,7 +586,7 @@ inline entt::entity parser::if_stmt() noexcept
                 auto const rest_ret = stmt(); // trailing stmt
 
                 // TODO: is this correct?
-                return return_phi(mem_state, then_ret, rest_ret);
+                return bld.make(return_phi{mem_state, then_ret, rest_ret});
             } //
         });
 }
@@ -808,6 +803,9 @@ inline void parser::func_decl() noexcept
     // TODO: is this actually the `Return` node?
     auto const ret = block([&](scope const *func_env, entt::entity ret)
                            {
+                               // TODO: is this correct here?
+                               eat(token_kind::Semicolon); // ';'
+
                                // TODO: handle multi-return case
                                entt::entity const params[]{ret};
                                auto const out = bld.make(node_op::Return, std::span(params, ret != entt::null));
@@ -875,6 +873,8 @@ inline void parser::decl() noexcept
         break;
 
     case token_kind::Eof:
+        // TODO: is this correct?
+        bld.pop_vis();
         codegen_main();
         break;
 
@@ -886,6 +886,10 @@ inline void parser::decl() noexcept
 
 inline void parser::prog() noexcept
 {
+    // TODO: is this correct?
+    scope_visibility vis;
+    bld.push_vis<visibility::global>(vis);
+
     mem_state = bld.make(node_op::Start);
 
     decl(); // decl*
@@ -904,6 +908,7 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
 
     // TODO: recheck this
     auto const node = bld.make(node_op::Proj, std::span(&mem_state, 1));
+    // TODO: figure out the exact type of this
     bld.reg.get<node_type>(node).type = int_const::value(i);
 
     // TODO: these params should be defined in the function's block, not on global env
@@ -970,6 +975,8 @@ inline void parser::codegen_main() noexcept
     // TODO: is this correct?
     (void)bld.make(exit_node{.mem_state = mem_state, .code = 0});
     // TODO: DCE on unused functions
+
+    bld.pop_vis(); // just for correctness
 }
 
 // parsing helpers

@@ -8,6 +8,7 @@
 #include "utils/smallvec.hpp"
 
 // TODO:
+// - `delay_typecheck` component to resolve out-of-order declarations and such
 // - evaluate the type of every node when parsing, then `const_fold` would simply check `type.is_known` and replace the node with `Const(type)`
 // - (maybe) it's a good idea to mark `Return` nodes with a component, so you can later easily jump to them to cut unused functions
 // - most of the nodes have a fixed (small) number of children, so use a smallvector instead for less dynamic allocations

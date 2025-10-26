@@ -82,8 +82,9 @@ struct builder final
 {
     builder()
         : global{
-              .name = visibility::global,
-              .pool = &reg.storage<void>((entt::id_type)visibility::global),
+              // TODO: is this correct?
+              .name = visibility::maybe_reachable,
+              .pool = &reg.storage<void>((entt::id_type)visibility::maybe_reachable),
           }
     {
     }
@@ -159,6 +160,7 @@ inline void prune_dead_code(builder &bld, entt::entity ret) noexcept
     auto const &ins_storage = bld.reg.storage<node_inputs>();
     auto const &effects = bld.reg.storage<effect>();
 
+    // TODO: cache this storage because why not
     std::vector<entt::entity> to_visit;
     to_visit.push_back(ret);
 
@@ -186,7 +188,9 @@ inline void prune_dead_code(builder &bld, entt::entity ret) noexcept
 
     // TODO: these are unreachable, so maybe leave a warning for significant nodes? (functions, etc.)
     {
-        auto to_cut_view = entt::basic_view{std::tie(new_nodes), std::tie(visited)};
+        // auto to_cut_view = entt::basic_view{std::tie(new_nodes), std::tie(visited)};
+        // TODO: is this correct?
+        auto to_cut_view = entt::basic_view{std::tie(bld.reg.storage<entt::entity>()), std::tie(visited)};
         bld.reg.destroy(to_cut_view.begin(), to_cut_view.end());
     }
 

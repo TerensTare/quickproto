@@ -11,3 +11,5 @@
 // TODO:
 // - figure out how to have runtime-customizable peepholes with this.
 // - do you need to tail-call `make` on nodes where peephole produced a new node?
+// - remove visibility of the children of replaced nodes and replace with `maybe_reachable`, so they can be visited next DCE round
+// ^ if this is implemented, do you then need to cut only entities that are in `maybe_reachable - reachable` after DCE?

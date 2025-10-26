@@ -1,8 +1,12 @@
 
+#include <chrono>
 #include <memory>
 
 #include "backends/dot.hpp"
 #include "parser.hpp"
+
+// TODO: parallelize DCE function calls, spawning them in a background thread each time a function is parsed
+// ^ how does this play out with "no forward declarations?"
 
 // TODO:
 // - visual debugger with tunable steppable vs non-steppable coroutines for compiler passes
@@ -43,6 +47,8 @@ int main(int argc, char **argv)
     auto n = read_file(args.in_path, std::out_ptr(text));
     ensure(n != -1, "Cannot read input file!");
 
+    auto const start = std::chrono::system_clock::now();
+
     auto p = parser{
         .scan{.text = text.get()},
     };
@@ -54,6 +60,9 @@ int main(int argc, char **argv)
 
     dot_backend dot;
     dot.compile(f, p.bld.reg);
+
+    auto const finish = std::chrono::system_clock::now();
+    std::println("Compiling {} took {:%T}", args.in_path, finish - start);
 
     return 0;
 }

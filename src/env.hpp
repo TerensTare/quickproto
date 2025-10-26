@@ -29,12 +29,12 @@ struct dual_hash final
 {
     using is_transparent = void;
 
-    constexpr std::size_t operator()(std::string_view str) const noexcept
+    static constexpr std::size_t operator()(std::string_view str) noexcept
     {
         return (std::size_t)entt::hashed_string::value(str.data(), str.size());
     }
 
-    constexpr std::size_t operator()(entt::id_type id) const noexcept
+    static constexpr std::size_t operator()(entt::id_type id) noexcept
     {
         return (std::size_t)id;
     }
@@ -49,7 +49,7 @@ struct dual_cmp final
 
     template <typename L, typename R>
         requires(is_ok<std::remove_cvref_t<L>> and is_ok<std::remove_cvref_t<R>>)
-    constexpr bool operator()(L lhs, R rhs) const noexcept
+    static constexpr bool operator()(L lhs, R rhs) noexcept
     {
         return dual_hash{}(lhs) == dual_hash{}(rhs);
     }
