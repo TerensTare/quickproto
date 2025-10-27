@@ -125,6 +125,27 @@ struct int_bot final : int_
                    ? (value_type const *)this
                    : new binary_op_not_implemented_type{"<", this, rhs};
     }
+
+    inline value_type const *band(value_type const *rhs) const noexcept
+    {
+        return rhs->as<int_>()
+                   ? (value_type const *)this
+                   : new binary_op_not_implemented_type{"&", this, rhs};
+    }
+
+    inline value_type const *bxor(value_type const *rhs) const noexcept
+    {
+        return rhs->as<int_>()
+                   ? (value_type const *)this
+                   : new binary_op_not_implemented_type{"^", this, rhs};
+    }
+
+    inline value_type const *bor(value_type const *rhs) const noexcept
+    {
+        return rhs->as<int_>()
+                   ? (value_type const *)this
+                   : new binary_op_not_implemented_type{"|", this, rhs};
+    }
 };
 
 struct int_const final : int_
@@ -211,6 +232,42 @@ struct int_const final : int_
             return bool_top::self();
         else
             return new binary_op_not_implemented_type{"<", this, rhs};
+    }
+
+    inline value_type const *band(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_bot>())
+            return rhs;
+        else if (auto ptr = rhs->as<int_const>(); ptr)
+            return new int_const{n & ptr->n};
+        else if (rhs->as<int_top>())
+            return this;
+        else
+            return new binary_op_not_implemented_type{"&", this, rhs};
+    }
+
+    inline value_type const *bxor(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_bot>())
+            return rhs;
+        else if (auto ptr = rhs->as<int_const>(); ptr)
+            return new int_const{n ^ ptr->n};
+        else if (rhs->as<int_top>())
+            return this;
+        else
+            return new binary_op_not_implemented_type{"^", this, rhs};
+    }
+
+    inline value_type const *bor(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_bot>())
+            return rhs;
+        else if (auto ptr = rhs->as<int_const>(); ptr)
+            return new int_const{n | ptr->n};
+        else if (rhs->as<int_top>())
+            return this;
+        else
+            return new binary_op_not_implemented_type{"|", this, rhs};
     }
 
     int64_t n;

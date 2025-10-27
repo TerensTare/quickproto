@@ -70,15 +70,20 @@ enum class node_op : uint8_t
     Mul,
     Div,
 
+    // boolean logic
+    LogicAnd,
+    LogicOr,
+
+    // bit logic
+    BitAnd,
+    BitXor,
+    BitOr,
+
     // floating point operations
     Fadd,
     Fsub,
     Fmul,
     Fdiv,
-
-    // boolean logic
-    LogicAnd,
-    LogicOr,
 
     // TODO: simplify these to just < and ==
     CmpEq,

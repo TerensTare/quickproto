@@ -74,6 +74,12 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
         return circle_node("And");
     case node_op::LogicOr:
         return circle_node("Or");
+    case node_op::BitAnd:
+        return circle_node("&");
+    case node_op::BitXor:
+        return circle_node("^");
+    case node_op::BitOr:
+        return circle_node("|");
 
     case node_op::IfYes:
         return named_node("IfYes");

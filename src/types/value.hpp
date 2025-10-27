@@ -42,6 +42,15 @@ struct value_type
     virtual value_type const *mul(value_type const *rhs) const noexcept;
     // lhs / rhs
     virtual value_type const *div(value_type const *rhs) const noexcept;
+
+    // bit logic
+    // lhs & rhs
+    virtual value_type const *band(value_type const *rhs) const noexcept;
+    // lhs ^ rhs
+    virtual value_type const *bxor(value_type const *rhs) const noexcept;
+    // lhs | rhs
+    virtual value_type const *bor(value_type const *rhs) const noexcept;
+
     // unary
     // -lhs
     virtual value_type const *neg() const noexcept;
@@ -151,6 +160,10 @@ inline value_type const *value_type::lt(value_type const *rhs) const noexcept { 
 
 inline value_type const *value_type::logic_and(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"&&", this, rhs}; }
 inline value_type const *value_type::logic_or(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"||", this, rhs}; }
+
+inline value_type const *value_type::band(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"&", this, rhs}; }
+inline value_type const *value_type::bxor(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"^", this, rhs}; }
+inline value_type const *value_type::bor(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"|", this, rhs}; }
 
 // TODO: use a custom error for this
 inline value_type const *value_type::call(std::span<value_type const *> args) const noexcept { return new unary_op_not_implemented_type{"()", this}; }

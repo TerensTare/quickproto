@@ -11,6 +11,7 @@
 #include "types/all.hpp"
 
 // TODO:
+// - &=, ^=, |=
 // - most calls to block need to be followed by a semicolon, except for the block after an `if` and before an `else`
 // - find a way to avoid needing trailing newline on files (expected Semicolon but got Eof)
 // - codegen a `Load`/`Store` for global variables, as these operations need to be "lazy"
@@ -77,6 +78,9 @@ enum class parse_prec : uint8_t
     And,        // &&
     Equality,   // == !=
     Comparison, // < <= >= >
+    BitOr,      // |
+    BitXor,     // ^
+    BitAnd,     // &
     Term,       // + -
     Factor,     // * /
 };
@@ -95,6 +99,9 @@ static constexpr auto prec_table = []()
     table[(uint8_t)token_kind::GreaterEqual] = parse_prec::Comparison;
     table[(uint8_t)token_kind::Less] = parse_prec::Comparison;
     table[(uint8_t)token_kind::LessEqual] = parse_prec::Comparison;
+    table[(uint8_t)token_kind::Or] = parse_prec::BitOr;
+    table[(uint8_t)token_kind::Xor] = parse_prec::BitXor;
+    table[(uint8_t)token_kind::And] = parse_prec::BitAnd;
     table[(uint8_t)token_kind::Plus] = parse_prec::Term;
     table[(uint8_t)token_kind::Minus] = parse_prec::Term;
     table[(uint8_t)token_kind::Star] = parse_prec::Factor;
@@ -127,7 +134,7 @@ struct parser final
     inline entt::entity primary() noexcept;
 
     // expr ::= primary (<binary_op> primary)*
-    // <binary_op> ::= '||' | '&&' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '+' | '-' | '*' | '/'
+    // <binary_op> ::= '||' | '&&' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '+' | '-' | '*' | '/' | '&' | '^' | '|'
     // ^ how much is parsed by a specific call to `expr` depends on the precedence level parsed
     [[nodiscard]]
     inline entt::entity expr(parse_prec prec = parse_prec::None) noexcept;
@@ -141,7 +148,7 @@ struct parser final
     [[nodiscard]]
     inline entt::entity local_decl(std::span<token const> ids) noexcept;
     // expr comp_op expr ';' stmt
-    // comp_op ::= '+=' | '-=' | '*=' | '/='
+    // comp_op ::= '+=' | '-=' | '*=' | '/=' | '&=' | '^=' | '|='
     [[nodiscard]]
     inline entt::entity compound_assign(std::span<token const> ids) noexcept;
     // expr post_op ';' stmt
@@ -449,6 +456,9 @@ inline entt::entity parser::compound_assign(std::span<token const> ids) noexcept
         token_kind::MinusEqual,
         token_kind::StarEqual,
         token_kind::SlashEqual,
+        token_kind::AndEqual,
+        token_kind::XorEqual,
+        token_kind::OrEqual,
     };
 
     auto const optok = eat(ops).kind; // compound_op
@@ -458,13 +468,20 @@ inline entt::entity parser::compound_assign(std::span<token const> ids) noexcept
     eat(token_kind::Semicolon); // ';'
 
     // codegen
-    auto const node_op = optok == token_kind::PlusEqual
-                             ? node_op::Add
-                         : optok == token_kind::MinusEqual
-                             ? node_op::Sub
-                         : optok == token_kind::StarEqual
-                             ? node_op::Mul
-                             : node_op::Div;
+    auto const node_op =
+        optok == token_kind::PlusEqual
+            ? node_op::Add
+        : optok == token_kind::MinusEqual
+            ? node_op::Sub
+        : optok == token_kind::StarEqual
+            ? node_op::Mul
+        : optok == token_kind::SlashEqual
+            ? node_op::Div
+        : optok == token_kind::AndEqual
+            ? node_op::BitAnd
+        : optok == token_kind::XorEqual
+            ? node_op::BitXor
+            : node_op::BitOr;
 
     // TODO: do NOT use the lexeme here, use the address of lhs (eg. `a.b` is not a single token)
     auto const name = scan.lexeme(ids[0]);
@@ -1080,6 +1097,13 @@ inline entt::entity parser::binary_node(token_kind kind, entt::entity lhs, entt:
         return bld.make(and_node{lhs, rhs});
     case OrOr:
         return bld.make(or_node{lhs, rhs});
+
+    case And:
+        return bld.make(bit_and_node{lhs, rhs});
+    case Xor:
+        return bld.make(bit_xor_node{lhs, rhs});
+    case Or:
+        return bld.make(bit_or_node{lhs, rhs});
 
     default:
         std::unreachable();

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "builder/binary_math.hpp"
+#include "builder/bit_logic.hpp"
 #include "builder/compare.hpp"
 #include "builder/control_flow.hpp"
 #include "builder/logic.hpp"
