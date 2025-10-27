@@ -64,6 +64,8 @@ int main(int argc, char **argv)
     auto const finish = std::chrono::system_clock::now();
     std::println("Compiling {} took {:%T}", args.in_path, finish - start);
 
+    fclose(f);
+
     return 0;
 }
 

@@ -67,8 +67,10 @@ struct scanner_iter final
     char const *text;
 };
 
+// TODO: try this vs entt::dense_map
 inline static std::unordered_map<std::string_view, token_kind> const keywords{
     {"break", token_kind::KwBreak},
+    {"const", token_kind::KwConst},
     {"continue", token_kind::KwContinue},
     {"else", token_kind::KwElse},
     {"false", token_kind::KwFalse},
@@ -264,7 +266,7 @@ inline token_kind scanner_iter::next() noexcept
     case ',':
         return Comma;
 
-    case '\n': // if this is hit, assume automatic semicolon insertion
+    case '\n': // this is only hit on automatic semicolon insertion
     case ';':
         return Semicolon;
 

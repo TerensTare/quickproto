@@ -100,6 +100,7 @@ private:
             s = s->prev;
         } while (s);
 
+        // TODO: create a placeholder node instead with a `resolve` tag that signals the type checker to resolve this later
         return entt::null;
     }
 };

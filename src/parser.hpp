@@ -184,11 +184,13 @@ struct parser final
 
     // decl
 
+    // 'const' <ident> '=' expr ';' decl
+    inline void const_decl() noexcept;
     // 'func' <ident> '(' param_decl,*, ')' type? block ';' decl
     inline void func_decl() noexcept;
     // 'var' <ident> type '=' expr ';' decl
     inline void var_decl() noexcept;
-    // func_decl | var_decl
+    // const_decl | func_decl | var_decl
     inline void decl() noexcept;
     // decl
     inline void prog() noexcept;
@@ -746,6 +748,33 @@ inline entt::entity parser::stmt() noexcept
 
 // decl
 
+inline void parser::const_decl() noexcept
+{
+    eat(token_kind::KwConst);                 // 'const'
+    auto const name = eat(token_kind::Ident); // <ident>
+    eat(token_kind::Equal);                   // '='
+    auto const init = expr();                 // expr
+    eat(token_kind::Semicolon);               // ';'
+
+    // TODO: do you need to codegen `Store` for all kinds of constants?
+    // TODO: link a `Proj` node from the global `State`
+    entt::entity const ins[]{init};
+    auto const store = bld.make(node_op::Store, ins);
+    auto &&ty = bld.reg.get<node_type>(store).type;
+    bld.reg.get<node_type>(store).type = new const_type{ty};
+    bld.reg.get_or_emplace<effect>(store).target = mem_state;
+    mem_state = store;
+
+    // TODO: mark the name as non-modifiable somehow
+    env.new_var(scan.lexeme(name), store);
+
+    // TODO: `prune_dead_code` is common for every declaration, find a way to address this
+    // ^ merge `prune_dead_code` and `decl` so you don't jump around; make sure it's a tail call
+    prune_dead_code(bld, store);
+
+    decl();
+}
+
 inline void parser::func_decl() noexcept
 {
     // some setup codegen before parsing
@@ -864,6 +893,10 @@ inline void parser::decl() noexcept
 {
     switch (scan.peek.kind)
     {
+    case token_kind::KwConst:
+        const_decl();
+        break;
+
     case token_kind::KwFunc:
         func_decl();
         break;
@@ -873,8 +906,6 @@ inline void parser::decl() noexcept
         break;
 
     case token_kind::Eof:
-        // TODO: is this correct?
-        bld.pop_vis();
         codegen_main();
         break;
 

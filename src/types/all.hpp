@@ -2,6 +2,7 @@
 #pragma once
 
 #include "types/bool.hpp"
+#include "types/const.hpp"
 #include "types/float.hpp"
 #include "types/func.hpp"
 #include "types/int.hpp"

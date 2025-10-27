@@ -47,6 +47,7 @@ enum class token_kind : uint8_t
 
     // Keywords
     KwBreak,
+    KwConst,
     KwContinue,
     KwElse,
     KwFalse,

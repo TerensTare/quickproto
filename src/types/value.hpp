@@ -29,7 +29,6 @@ struct value_type
     template <typename T>
     inline T const *as() const noexcept { return dynamic_cast<T const *>(this); }
 
-
     // TODO: recheck this
     // lhs = rhs
     virtual value_type const *assign(value_type const *rhs) const noexcept;
@@ -78,6 +77,19 @@ struct value_type
 
     // TODO: how do you implement this on `struct`, `func`, `tuple`, etc.?
     virtual char const *name() const noexcept = 0;
+};
+
+// unknown type, used for nodes whose type is lazy-evaluated (eg. calls to not-yet declared functions)
+// TODO: do you need to overload the operators for this?
+struct bot_type final : value_type
+{
+    inline static value_type const *self() noexcept
+    {
+        static bot_type ty;
+        return &ty;
+    }
+
+    char const *name() const noexcept { return "{unknown}"; }
 };
 
 // signals that this unary operator is not implemented

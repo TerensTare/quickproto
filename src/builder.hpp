@@ -53,7 +53,7 @@ inline value_type const *type_by_op(node_op op) noexcept
 
         // HACK: figure each node out instead
     default:
-        return int_bot::self();
+        return bot_type::self();
     }
 }
 
