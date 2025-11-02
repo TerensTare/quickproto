@@ -9,8 +9,10 @@ Source code > Lexing > (Parsing + SoN generation + peephole/optimizing SoN) > De
 
 Here is a list of the passes implemented in the peephole stage so far:
 - [x] Constant folding for the following nodes:
-    - binary: `+`, `-`, `*`, `/`
+    - arithmetic: `+`, `-`, `*`, `/`
+    - bit logic: `&`, `^`, `|`
     - unary: `-const(x)` to `const(-x)`
+    - identity comparisons: `a == a` to `true`, `a != a` to `false`, similar `<`, `<=`, `>`, `>=`
 
 ## Building
 

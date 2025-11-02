@@ -37,7 +37,7 @@ inline smallvec compress(stacklist<entt::entity> const *list, size_t n) noexcept
     auto entries = std::make_unique_for_overwrite<entt::entity[]>(n);
     for (size_t i{}; i < n; ++i)
     {
-        entries[i] = list->value;
+        entries[n - i - 1] = list->value;
         list = list->prev;
     }
 

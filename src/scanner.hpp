@@ -7,7 +7,10 @@
 #include "token.hpp"
 
 // TODO:
-// - implicit semicolon insertion
+// - parse integer values as `uint64`, then add `truncate` nodes if specified type is smaller
+// ^ what about negative numbers though?
+// ^ not a problem as initially `-` and `{integer}` are separate tokens
+// ^ repeat the same logic for floating points with `float64`, and also for assigning int constants to floating values
 
 constexpr bool is_alpha(char ch) noexcept
 {
@@ -87,8 +90,8 @@ inline bool auto_semicolon(token_kind kind)
 {
     switch (kind)
     {
-    // TODO: float + any kind of literal
     case token_kind::Integer:
+    case token_kind::Decimal:
     case token_kind::String:
     case token_kind::Ident:
     case token_kind::KwTrue:
@@ -100,6 +103,7 @@ inline bool auto_semicolon(token_kind kind)
     case token_kind::PlusPlus:
     case token_kind::MinusMinus:
     case token_kind::RightParen:
+    case token_kind::RightBracket:
     case token_kind::RightBrace:
         // TODO: rightBracket
         return true;
@@ -241,6 +245,10 @@ inline token_kind scanner_iter::next() noexcept
         return LeftParen;
     case ')':
         return RightParen;
+    case '[':
+        return LeftBracket;
+    case ']':
+        return RightBracket;
     case '{':
         return LeftBrace;
     case '}':

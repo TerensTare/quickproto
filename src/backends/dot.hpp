@@ -43,7 +43,9 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
             return std::format_to(out, "[label=\"{}\"]", int_->n);
         else if (auto &&bool_ = type.type->as<bool_const>())
             return std::format_to(out, "[label=\"{}\"]", bool_->b);
+        // TODO: implement other cases
     }
+    break;
     case node_op::Addr:
         return std::format_to(out, "[label=\"Addr({})\"]", type.type->as<int_const>()->n);
     case node_op::UnaryNeg:

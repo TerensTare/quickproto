@@ -11,3 +11,6 @@
 #include "types/struct.hpp"
 #include "types/tuple.hpp"
 #include "types/void.hpp"
+
+// qualifiers
+#include "types/array.hpp"

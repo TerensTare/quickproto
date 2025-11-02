@@ -177,4 +177,86 @@ struct float32 final : float_
     float f;
 };
 
-// TODO: implement float64
+struct float64 final : float_
+{
+    explicit float64(double d) noexcept : d{d} {}
+
+    // impl value_type
+    inline value_type const *add(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<float_bot>())
+            return rhs;
+        else if (auto ptr = rhs->as<float64>())
+            return new float64{d + ptr->d};
+        else if (rhs->as<float_top>())
+            return this;
+        else
+            return new binary_op_not_implemented_type{"+", this, rhs};
+    }
+
+    inline value_type const *sub(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<float_bot>())
+            return rhs;
+        else if (auto ptr = rhs->as<float64>())
+            return new float64{d - ptr->d};
+        else if (rhs->as<float_top>())
+            return this;
+        else
+            return new binary_op_not_implemented_type{"-", this, rhs};
+    }
+
+    inline value_type const *mul(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<float_bot>())
+            return rhs;
+        else if (auto ptr = rhs->as<float64>(); ptr)
+            return new float64{d * ptr->d};
+        else if (rhs->as<float_top>())
+            return this;
+        else
+            return new binary_op_not_implemented_type{"*", this, rhs};
+    }
+
+    inline value_type const *div(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<float_bot>())
+            return rhs;
+        else if (auto ptr = rhs->as<float64>(); ptr)
+            return (ptr->d == 0.0) ? float_top::self() : new float64{d / ptr->d};
+        else if (rhs->as<float_top>())
+            return this;
+        else
+            return new binary_op_not_implemented_type{"/", this, rhs};
+    }
+
+    inline value_type const *neg() const noexcept { return new float64{-d}; }
+
+    inline value_type const *eq(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<float_bot>())
+            return bool_bot::self();
+        else if (auto ptr = rhs->as<float64>(); ptr)
+            return new bool_const{d == ptr->d};
+        else if (rhs->as<float_top>())
+            return bool_top::self();
+        else
+            return new binary_op_not_implemented_type{"==", this, rhs};
+    }
+
+    inline value_type const *lt(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<float_bot>())
+            return bool_bot::self();
+        else if (auto ptr = rhs->as<float64>(); ptr)
+            return new bool_const{d < ptr->d};
+        else if (rhs->as<float_top>())
+            return bool_top::self();
+        else
+            return new binary_op_not_implemented_type{"<", this, rhs};
+    }
+
+    inline char const *name() const noexcept final { return "float64"; }
+
+    double d;
+};

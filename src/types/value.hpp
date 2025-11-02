@@ -4,6 +4,7 @@
 #include <span>
 
 // TODO:
+// - `index_as_const`
 // - have a common interface for operators, then each sub-type implements its own version
 // ^ eg. `add` is `+`, but `int + int` is `iadd`
 // - separate float32 from float64
@@ -83,6 +84,8 @@ struct value_type
 
     // lhs(args...)
     virtual value_type const *call(std::span<value_type const *> args) const noexcept;
+    // lhs[rhs]
+    virtual value_type const *index(value_type const *i) const noexcept;
 
     // TODO: how do you implement this on `struct`, `func`, `tuple`, etc.?
     virtual char const *name() const noexcept = 0;
@@ -167,3 +170,5 @@ inline value_type const *value_type::bor(value_type const *rhs) const noexcept {
 
 // TODO: use a custom error for this
 inline value_type const *value_type::call(std::span<value_type const *> args) const noexcept { return new unary_op_not_implemented_type{"()", this}; }
+// TODO: use a custom error for this
+inline value_type const *value_type::index(value_type const *i) const noexcept { return new binary_op_not_implemented_type{"[]", this, i}; }

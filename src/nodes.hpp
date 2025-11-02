@@ -8,6 +8,11 @@
 #include "utils/smallvec.hpp"
 
 // TODO:
+// - `checked_index` by default, which can be lowered to `index` iff `index < len` is `true`
+// - optimization: Loads at an index with known type are just a `const` node
+// - no need for sized math operations, just generate a `truncate` (& ~0) node as needed and just have `Iadd`/`Uadd`/similar
+// ^ you probably still need `F32add` and `F64add` + similar due to memory layout of floats
+// ^ also for uint you don't need an "expand" node, but for  sint/floats you probably need an "s/fextendMtoN" instruction
 // - `delay_typecheck` component to resolve out-of-order declarations and such
 // - evaluate the type of every node when parsing, then `const_fold` would simply check `type.is_known` and replace the node with `Const(type)`
 // - (maybe) it's a good idea to mark `Return` nodes with a component, so you can later easily jump to them to cut unused functions
@@ -49,7 +54,7 @@ struct value_type;
 // component
 enum class node_op : uint8_t
 {
-    Load,      // Load In=[Addr(someVar), start | lastStoreBeforeThis]
+    Load,      // Load In=[Addr(someVar), start | lastStoreBeforeThis, Offset=size_t(default=0)]
     Store,     // Store In=[Addr(dstRegister), srcNode, start | lastStoreBeforeThis]
     MultiNode, // MultiNode Value=[n] In=array[node *; n]
     Proj,      // Proj Value=[i] In=[multiNode]

@@ -11,8 +11,11 @@
 #include "types/all.hpp"
 
 // TODO:
-// - &=, ^=, |=
 // - most calls to block need to be followed by a semicolon, except for the block after an `if` and before an `else`
+// ^ can you simply require no semicolon after `}` and avoid automatic semicolon insertion for it?
+// ^ this is not optimal as `Type{}` also uses `}` and a `;` is a valid following
+// - (maybe) literals should have a special type that can implicitly downcast as long as it fits? (eg. 257 cannot fit in a `uint8`)
+// ^ or maybe you can check these stuff in `type::value` instead and return an error on failure?
 // - find a way to avoid needing trailing newline on files (expected Semicolon but got Eof)
 // - codegen a `Load`/`Store` for global variables, as these operations need to be "lazy"
 // ^ (maybe) it's best to codegen `Load`/`Store` for everything, then cut the nodes for local stuff?
@@ -71,6 +74,7 @@ var_env merge(var_env const &parent, var_env const &left, var_env const &right) 
 // ^ a declaration is followed by a declaration or an Eof
 // ^ a statement is followed by a statement or a `}`
 
+// precedence table; operators with higher precedence get parsed earlier (eg. `a + b * c` gets parsed as `a + (b * c)`)
 enum class parse_prec : uint8_t
 {
     None,
@@ -114,21 +118,28 @@ struct parser final
 {
     // expr
 
-    // call_or_self(base) ::= call(base) | base
+    // call_index_or_self(base) ::= call(base) | index(base) | base
     // ^ie. it's `base` + any possible call following it
     [[nodiscard]]
-    inline entt::entity call_or_self(entt::entity base) noexcept;
+    inline entt::entity call_index_or_self(entt::entity base) noexcept;
 
-    // call(base) ::= call_or_self( base '(' expr,*,? ')' )
-    // ^ meaning this rule will parse a call, then invoke `call_or_self` with the parsed call as `base`
+    // call(base) ::= call__index_or_self( base '(' expr,*,? ')' )
+    // ^ meaning this rule will parse a call, then invoke `call_index_or_self` with the parsed call as `base`
     [[nodiscard]]
     inline entt::entity call(entt::entity base) noexcept;
+
+    // index(base) ::= call__index_or_self( base '[' expr ']' )
+    // ^ meaning this rule will parse an index, then invoke `call_index_or_self` with the parsed index as `base`
+    [[nodiscard]]
+    inline entt::entity index(entt::entity base) noexcept;
+
     // primary ::= 'true'
     //           | 'false'
     //           | <integer>
+    //           | <decimal>
     //           | <unary_op> expr
     //           | '(' expr ')'
-    //           | call_or_self(<ident>)
+    //           | call_index_or_self(<ident>)
     // <unary_op> ::= '!' | '-'
     [[nodiscard]]
     inline entt::entity primary() noexcept;
@@ -221,7 +232,14 @@ private:
 
     // type
 
+    // array_type | named_type
     inline value_type const *type() noexcept;
+
+    // '[' <integer> ']' type
+    inline value_type const *array_type() noexcept;
+
+    // <ident>
+    inline value_type const *named_type() noexcept;
 
     inline void merge(scope &parent, scope const &lhs, scope const &rhs) noexcept;
 
@@ -278,12 +296,15 @@ private:
     inline static scope global_scope() noexcept;
 };
 
-inline entt::entity parser::call_or_self(entt::entity base) noexcept
+inline entt::entity parser::call_index_or_self(entt::entity base) noexcept
 {
     switch (scan.peek.kind)
     {
     case token_kind::LeftParen:
         return call(base);
+
+    case token_kind::LeftBracket:
+        return index(base);
 
     default:
         return base;
@@ -310,23 +331,52 @@ inline entt::entity parser::call(entt::entity base) noexcept
     mem_state = call;
 
     // TODO: inline CPS this
-    return call_or_self(call); // call_or_self(parsed)
+    return call_index_or_self(call); // call_index_or_self(parsed)
+}
+
+inline entt::entity parser::index(entt::entity base) noexcept
+{
+    // parsing
+
+    scan.next(); // '['
+    // TODO: add `base` to the parameters list or maybe as a special node
+    auto const i = expr();         // expr
+    eat(token_kind::RightBracket); // ']'
+
+    // codegen
+
+    entt::entity const ins[]{base, i};
+
+    // TODO: is this correct? (consider mutability, generalizing `Load`, etc.)
+    auto const node = bld.make(node_op::Load, ins);
+    // TODO: the call should probably modify just the memory node, not the control flow node
+    // TODO: the call should probably link to the `Return` node of the called function, not the `Start`
+    bld.reg.emplace<effect>(node, mem_state);
+
+    // TODO: is this correct? how do you make sure it happens before any possible store, but still optimize it out if only load?
+    mem_state = node;
+
+    // TODO: inline CPS this
+    return call_index_or_self(node); // call_index_or_self(parsed)
 }
 
 inline entt::entity parser::primary() noexcept
 {
-    // TODO: CPS the `expr` calls here, repeat for `call` and `call_or_self`, etc.
+    // TODO: CPS the `expr` calls here, repeat for `call`, `index` and `call_index_or_self`, etc.
     using enum token_kind;
 
     // parsing
 
     token_kind const primary_tokens[]{
+        // literal
         Integer,
+        Decimal,
         KwFalse,
         KwTrue,
-        KwNil,     // literal
-        Ident,     // variable/function/type/const/whatever
-        LeftParen, // (expr)
+        KwNil,
+        Ident,       // variable/function/type/const/whatever
+        LeftParen,   // (expr)
+        LeftBracket, // [] type { expr,*,? } - array initializer
         Bang,
         Minus, // unary
     };
@@ -341,10 +391,20 @@ inline entt::entity parser::primary() noexcept
     {
         auto const txt = scan.lexeme(tok);
 
-        int64_t val{};
+        uint64_t val{};
         std::from_chars(txt.data(), txt.data() + txt.size(), val);
         // HACK: figure out actual int size
         return bld.make(value_node{int_const::value(val)});
+    }
+
+    case Decimal:
+    {
+        auto const txt = scan.lexeme(tok);
+
+        double val{};
+        std::from_chars(txt.data(), txt.data() + txt.size(), val);
+        // HACK: figure out actual int size
+        return bld.make(value_node{new float64{val}});
     }
 
     case KwFalse:
@@ -356,7 +416,7 @@ inline entt::entity parser::primary() noexcept
     case KwNil:
         return bld.make(value_node{int_const::value(0)});
 
-        // call_or_self(<ident>)
+        // call_index_or_self(<ident>)
     case Ident:
     {
         auto const name = scan.lexeme(tok);
@@ -366,7 +426,7 @@ inline entt::entity parser::primary() noexcept
 
         // TODO: in case of calls, this should get the function node
         auto const val = env.get_var(name);
-        return call_or_self(val);
+        return call_index_or_self(val);
     }
 
     // '(' expr ')'
@@ -375,6 +435,23 @@ inline entt::entity parser::primary() noexcept
         auto const ret = expr(); // expr
         eat(RightParen);         // ')'
         // TODO: is this ok or should you wrap it?
+        return ret;
+    }
+
+    // '['']' type '{' expr,*,? '}''
+    case LeftBracket:
+    {
+        eat(token_kind::RightBracket);                 // ']'
+        auto subty = type();                           // type
+        eat(token_kind::LeftBrace);                    // '{'
+        auto init = expr_list(token_kind::RightBrace); // '}'
+
+        // TODO: actually store all the types, not just the first one
+        // TODO: you also now need a `meet` operation to give the common lowest type between two given types
+        // TODO: hack, make the correct node
+        // TODO: typecheck that sizes match on `var_decl`
+        auto const ret = bld.make(node_op::Const);
+        bld.reg.get<node_type>(ret).type = new ::array_type{bld.reg.get<node_type const>(init[0]).type, init.n};
         return ret;
     }
 
@@ -734,7 +811,9 @@ inline entt::entity parser::stmt() noexcept
     case token_kind::LeftBrace:
         return block([&](scope const *env, entt::entity ret)
                      {
-                         auto left = stmt();
+                         // TODO: is this correct here?
+                         eat(token_kind::Semicolon); // ';'
+                         auto const left = stmt();
 
                          // TODO: also merge env with parent
 
@@ -994,7 +1073,39 @@ inline smallvec parser::expr_list(token_kind term) noexcept
 
 inline value_type const *parser::type() noexcept
 {
-    // TODO: parse qualifiers, etc.
+    // TODO: inline CPS this
+    switch (scan.peek.kind)
+    {
+    case token_kind::LeftBracket:
+        return array_type();
+
+    case token_kind::Ident:
+        return named_type();
+
+    default:
+        fail("Expected `[' or <identifier>");
+    }
+}
+
+inline value_type const *parser::array_type() noexcept
+{
+    // TODO: inline the check on `eat`
+    eat(token_kind::LeftBracket);                // '['
+    auto const n_tok = eat(token_kind::Integer); // <integer>
+    eat(token_kind::RightBracket);               // ']'
+
+    auto const txt = scan.lexeme(n_tok);
+
+    uint64_t n{};
+    std::from_chars(txt.data(), txt.data() + txt.size(), n);
+
+    auto base = type(); // TODO: you can CPS this and pass a `then` call that is propagated up to `named_type`
+    return new ::array_type{base, n};
+}
+
+inline value_type const *parser::named_type() noexcept
+{
+    // TODO: inline the check on `eat`
     auto const name = eat(token_kind::Ident); // type
 
     // TODO: do a full search for the type, not just on `top`
@@ -1123,6 +1234,7 @@ inline scope parser::global_scope() noexcept
     entt::dense_map<std::string_view, value_type const *, dual_hash, dual_cmp> types;
     types.insert({"int", int_bot::self()});
     types.insert({"bool", bool_bot::self()});
+    types.insert({"float64", float_bot::self()}); // HACK: replace with `float64_bot`
     // TODO: more built-in types
 
     return scope{

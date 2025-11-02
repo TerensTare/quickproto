@@ -6,10 +6,12 @@
 
 enum class token_kind : uint8_t
 {
-    LeftParen,  // (
-    RightParen, // )
-    LeftBrace,  // {
-    RightBrace, // }
+    LeftParen,    // (
+    RightParen,   // )
+    LeftBracket,  // [
+    RightBracket, // ]
+    LeftBrace,    // {
+    RightBrace,   // }
 
     Plus,       // +
     PlusPlus,   // ++
