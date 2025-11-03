@@ -138,13 +138,15 @@ struct parser final
     //           | <integer>
     //           | <decimal>
     //           | <unary_op> expr
-    //           | '(' expr ')'
+    //           | call_index_or_self( '(' expr ')' )
+    //           | call_index_or_self( array_literal )
     //           | call_index_or_self(<ident>)
     // <unary_op> ::= '!' | '-'
+    // array_literal ::= '[' ']' type '{' expr,*,? '}'
     [[nodiscard]]
     inline entt::entity primary() noexcept;
 
-    // expr ::= primary (<binary_op> primary)*
+    // expr ::= primary (<binary_op> expr(<binary_op-prec>))*
     // <binary_op> ::= '||' | '&&' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '+' | '-' | '*' | '/' | '&' | '^' | '|'
     // ^ how much is parsed by a specific call to `expr` depends on the precedence level parsed
     [[nodiscard]]
@@ -429,16 +431,16 @@ inline entt::entity parser::primary() noexcept
         return call_index_or_self(val);
     }
 
-    // '(' expr ')'
+    // call_or_index_or_self( '(' expr ')' )
     case LeftParen:
     {
         auto const ret = expr(); // expr
         eat(RightParen);         // ')'
         // TODO: is this ok or should you wrap it?
-        return ret;
+        return call_index_or_self(ret);
     }
 
-    // '['']' type '{' expr,*,? '}''
+    // call_or_index_or_self( '['']' type '{' expr,*,? '}' )
     case LeftBracket:
     {
         eat(token_kind::RightBracket);                 // ']'
@@ -452,7 +454,7 @@ inline entt::entity parser::primary() noexcept
         // TODO: typecheck that sizes match on `var_decl`
         auto const ret = bld.make(node_op::Const);
         bld.reg.get<node_type>(ret).type = new ::array_type{bld.reg.get<node_type const>(init[0]).type, init.n};
-        return ret;
+        return call_index_or_self(ret);
     }
 
     // '!' expr
