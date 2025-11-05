@@ -8,6 +8,7 @@
 #include <entt/entity/entity.hpp>
 
 #include "base.hpp"
+#include "types/value.hpp"
 
 // NOTE:
 // - when you get a variable, you can get from parent scope; but when you set you only set on this scope

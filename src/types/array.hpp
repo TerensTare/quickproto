@@ -5,6 +5,7 @@
 #include "types/value.hpp"
 
 // TODO: actually store each element's type for later optimizations
+// TODO: also store a `common type` for fast computations
 
 struct array_type final : value_type
 {
@@ -16,7 +17,7 @@ struct array_type final : value_type
         // NOTE: this assumes `i` is within bounds, which should be checked before calling this operation
         return i->as<int_>()
                    ? base
-                   : new binary_op_not_implemented_type{"[]", this, i};
+                   : value_type::index(i);
     }
 
     // TODO: return a better name

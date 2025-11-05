@@ -4,18 +4,27 @@
 #include <algorithm>
 #include <charconv>
 
-#include "builder/all.hpp"
+#include "nodegen/all.hpp"
 #include "env.hpp"
 #include "scanner.hpp"
 
 #include "types/all.hpp"
 
 // TODO:
+// - have a typecheck phase right before codegen that fires out errors related to type checking
+// ^ then you remove all the errors from `value_type`, as they should be handled on this phase instead
+// ^ as long as you load a constant
+// - inline loads from values at the same scope level (eg. loading globals in global scope or locals in local scope)
+// - define function names only after they are fully parsed
+// ^ in the meantime you can mark their call occurrences as `unresolved` and resolve later
+// ^ this allows you to also point the function node to the `Return` rather than `Start`
+// - compute an `inline score` for each function based on number of nodes, recursion, number of calls, etc.
 // - most calls to block need to be followed by a semicolon, except for the block after an `if` and before an `else`
 // ^ can you simply require no semicolon after `}` and avoid automatic semicolon insertion for it?
 // ^ this is not optimal as `Type{}` also uses `}` and a `;` is a valid following
 // - (maybe) literals should have a special type that can implicitly downcast as long as it fits? (eg. 257 cannot fit in a `uint8`)
 // ^ or maybe you can check these stuff in `type::value` instead and return an error on failure?
+// ^ ie. `value_type::narrow(value_type const *sub) { if sub out of this return out-of-bounds-value; else return sub; }
 // - find a way to avoid needing trailing newline on files (expected Semicolon but got Eof)
 // - codegen a `Load`/`Store` for global variables, as these operations need to be "lazy"
 // ^ (maybe) it's best to codegen `Load`/`Store` for everything, then cut the nodes for local stuff?
@@ -123,13 +132,14 @@ struct parser final
     [[nodiscard]]
     inline entt::entity call_index_or_self(entt::entity base) noexcept;
 
-    // call(base) ::= call__index_or_self( base '(' expr,*,? ')' )
+    // call(base) ::= call_index_or_self( base '(' expr,*,? ')' )
     // ^ meaning this rule will parse a call, then invoke `call_index_or_self` with the parsed call as `base`
     [[nodiscard]]
     inline entt::entity call(entt::entity base) noexcept;
 
-    // index(base) ::= call__index_or_self( base '[' expr ']' )
+    // index(base) ::= call_index_or_self( base '[' expr ']' )
     // ^ meaning this rule will parse an index, then invoke `call_index_or_self` with the parsed index as `base`
+    // ^ see `parse_prec` for the precedence of each operator
     [[nodiscard]]
     inline entt::entity index(entt::entity base) noexcept;
 
@@ -146,7 +156,7 @@ struct parser final
     [[nodiscard]]
     inline entt::entity primary() noexcept;
 
-    // expr ::= primary (<binary_op> expr(<binary_op-prec>))*
+    // expr ::= primary ( <binary_op> expr(<binary_op-prec>) )*
     // <binary_op> ::= '||' | '&&' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '+' | '-' | '*' | '/' | '&' | '^' | '|'
     // ^ how much is parsed by a specific call to `expr` depends on the precedence level parsed
     [[nodiscard]]
@@ -288,6 +298,9 @@ private:
     // codegen the `Start` and `Exit` nodes of the program, pass the control flow to `main` (and initializing globals when added).
     inline void codegen_main() noexcept;
 
+    // report any errors from the type checking phase
+    inline void report_errors();
+
     // parsing helpers
 
     inline token eat(token_kind kind) noexcept;
@@ -396,7 +409,7 @@ inline entt::entity parser::primary() noexcept
         uint64_t val{};
         std::from_chars(txt.data(), txt.data() + txt.size(), val);
         // HACK: figure out actual int size
-        return bld.make(value_node{int_const::value(val)});
+        return make(bld, value_node{int_const::value(val)});
     }
 
     case Decimal:
@@ -406,17 +419,17 @@ inline entt::entity parser::primary() noexcept
         double val{};
         std::from_chars(txt.data(), txt.data() + txt.size(), val);
         // HACK: figure out actual int size
-        return bld.make(value_node{new float64{val}});
+        return make(bld, value_node{new float64{val}});
     }
 
     case KwFalse:
-        return bld.make(value_node{new bool_const{false}});
+        return make(bld, value_node{new bool_const{false}});
     case KwTrue:
-        return bld.make(value_node{new bool_const{true}});
+        return make(bld, value_node{new bool_const{true}});
 
     // TODO: don't use integer type here anymore
     case KwNil:
-        return bld.make(value_node{int_const::value(0)});
+        return make(bld, value_node{int_const::value(0)});
 
         // call_index_or_self(<ident>)
     case Ident:
@@ -461,14 +474,14 @@ inline entt::entity parser::primary() noexcept
     case Bang:
     {
         auto const sub = expr(); // expr
-        return bld.make(unot_node{.sub = sub});
+        return make(bld, not_node{.sub = sub});
     }
 
     // '-' expr
     case Minus:
     {
         auto const sub = expr();
-        return bld.make(uneg_node{.sub = sub});
+        return make(bld, neg_node{.sub = sub});
     }
 
     default:
@@ -600,11 +613,11 @@ inline entt::entity parser::post_op(std::span<token const> ids) noexcept
     // auto const res = bld.makeval(mem_state, op::Addr, int_bot::self());
 
     auto const lhs = env.get_var(name);
-    auto const rhs = bld.make(value_node{int_const::value(1)});
+    auto const rhs = make(bld, value_node{int_const::value(1)});
 
     auto const opnode = optok == token_kind::PlusPlus
-                            ? bld.make(add_node{lhs, rhs})
-                            : bld.make(sub_node{lhs, rhs});
+                            ? make(bld, add_node{lhs, rhs})
+                            : make(bld, sub_node{lhs, rhs});
 
     env.set_var(name, opnode);
 
@@ -664,7 +677,7 @@ inline entt::entity parser::if_stmt() noexcept
                                        // TODO: if either `if` or `else` has a return, codegen a phi node and return it
                                        // TODO: is this correct?
                                        // TODO: `phi` should merge the children of `return` nodes
-                                       auto const merge_ret = bld.make(return_phi{mem_state, then_ret, else_ret});
+                                       auto const merge_ret = make(bld, return_phi_node{mem_state, then_ret, else_ret});
 
                                        // TODO: parse after merging nodes
                                        // TODO: this should be yet another branch, marked as `if(false)` ie. `~ctrl`
@@ -684,7 +697,7 @@ inline entt::entity parser::if_stmt() noexcept
                 auto const rest_ret = stmt(); // trailing stmt
 
                 // TODO: is this correct?
-                return bld.make(return_phi{mem_state, then_ret, rest_ret});
+                return make(bld, return_phi_node{mem_state, then_ret, rest_ret});
             } //
         });
 }
@@ -856,20 +869,24 @@ inline void parser::const_decl() noexcept
 
     // TODO: do you need to codegen `Store` for all kinds of constants?
     // TODO: link a `Proj` node from the global `State`
-    entt::entity const ins[]{init};
-    auto const store = bld.make(node_op::Store, ins);
-    auto &&ty = bld.reg.get<node_type>(store).type;
-    bld.reg.get<node_type>(store).type = new const_type{ty};
-    bld.reg.get_or_emplace<effect>(store).target = mem_state;
-    mem_state = store;
+    // TODO: typecheck in case the type is specific
+    // TODO: inline `init` as well, it should boil down to a constant value
+    // entt::entity const ins[]{init};
+    // auto const store = bld.make(node_op::Store, ins);
+    // auto &&ty = bld.reg.get<node_type>(store).type;
+    // bld.reg.get<node_type>(store).type = new const_type{ty};
+    // bld.reg.get_or_emplace<effect>(store).target = mem_state;
+    // mem_state = store;
 
     // TODO: mark the name as non-modifiable somehow
-    env.new_var(scan.lexeme(name), store);
+    env.new_var(scan.lexeme(name), init);
 
     // TODO: `prune_dead_code` is common for every declaration, find a way to address this
     // ^ merge `prune_dead_code` and `decl` so you don't jump around; make sure it's a tail call
-    prune_dead_code(bld, store);
+    // ^ you don't really need to prune here, the constant will be inlined to a single value
+    // prune_dead_code(bld, init);
 
+    // TODO: inline CPS this
     decl();
 }
 
@@ -891,6 +908,7 @@ inline void parser::func_decl() noexcept
 
     // TODO: environment pointer should be restored to before parameters, not after
     // ^ also declare the function name before params; the environment should contain it
+    // ^ or rather just mark it as unresolved and resolve it later
     // TODO: parse the parameters + return in a separate function, return the node id
 
     // param_decl,*,?
@@ -972,7 +990,7 @@ inline void parser::var_decl() noexcept
     // TODO: typecheck that rhs matches lhs using `value_type.assign`
 
     // TODO: codegen a `Store` only on global declarations
-    // TODO: link a `Proj` node from the global `State`
+    // TODO: link a `Proj` node from the global `State` as input
     entt::entity const ins[]{init};
     auto const store = bld.make(node_op::Store, ins);
     bld.reg.get_or_emplace<effect>(store).target = mem_state;
@@ -982,6 +1000,7 @@ inline void parser::var_decl() noexcept
 
     // TODO: `prune_dead_code` is common for every declaration, find a way to address this
     // ^ merge `prune_dead_code` and `decl` so you don't jump around; make sure it's a tail call
+    // - probably it's best to tail-call `decl` from `prune_dead_code`
     prune_dead_code(bld, store);
 
     decl();
@@ -1038,7 +1057,8 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
     // TODO: recheck this
     auto const node = bld.make(node_op::Proj, std::span(&mem_state, 1));
     // TODO: figure out the exact type of this
-    bld.reg.get<node_type>(node).type = int_const::value(i);
+    // TODO: is this correct now?
+    bld.reg.get<node_type>(node).type = ty;
 
     // TODO: these params should be defined in the function's block, not on global env
     auto const name = scan.lexeme(nametok);
@@ -1134,10 +1154,32 @@ inline void parser::codegen_main() noexcept
     mem_state = call_main;
 
     // TODO: is this correct?
-    (void)bld.make(exit_node{.mem_state = mem_state, .code = 0});
+    auto const exit = make(bld, exit_node{.mem_state = mem_state, .code = 0});
     // TODO: DCE on unused functions
 
     bld.pop_vis(); // just for correctness
+
+    // TODO: do you report once per program, once per global declaration, etc?
+    report_errors();
+}
+
+inline void parser::report_errors()
+{
+    for (auto &&[id, ty] : bld.reg.view<error_node const, node_type const>().each())
+    {
+        // HACK
+        // TODO: structured error messages
+        if (auto b = ty.type->as<binary_op_not_implemented_type>())
+        {
+            std::println("Cannot do {} {} {}!", b->lhs->name(), b->op, b->rhs->name());
+        }
+        else if (auto u = ty.type->as<unary_op_not_implemented_type>())
+        {
+            std::println("Cannot do {}{}!", u->op, u->sub->name());
+        }
+    }
+
+    bld.reg.clear<error_node>();
 }
 
 // parsing helpers
@@ -1185,38 +1227,38 @@ inline entt::entity parser::binary_node(token_kind kind, entt::entity lhs, entt:
     switch (kind)
     {
     case Plus:
-        return bld.make(add_node{lhs, rhs});
+        return make(bld, add_node{lhs, rhs});
     case Minus:
-        return bld.make(sub_node{lhs, rhs});
+        return make(bld, sub_node{lhs, rhs});
     case Star:
-        return bld.make(mul_node{lhs, rhs});
+        return make(bld, mul_node{lhs, rhs});
     case Slash:
-        return bld.make(div_node{lhs, rhs});
+        return make(bld, div_node{lhs, rhs});
 
     case BangEqual:
-        return bld.make(isne_node{lhs, rhs});
+        return make(bld, ne_node{lhs, rhs});
     case EqualEqual:
-        return bld.make(iseq_node{lhs, rhs});
+        return make(bld, eq_node{lhs, rhs});
     case Less:
-        return bld.make(islt_node{lhs, rhs});
+        return make(bld, lt_node{lhs, rhs});
     case LessEqual:
-        return bld.make(isle_node{lhs, rhs});
+        return make(bld, le_node{lhs, rhs});
     case Greater:
-        return bld.make(isgt_node{lhs, rhs});
+        return make(bld, gt_node{lhs, rhs});
     case GreaterEqual:
-        return bld.make(isge_node{lhs, rhs});
+        return make(bld, ge_node{lhs, rhs});
 
     case AndAnd:
-        return bld.make(and_node{lhs, rhs});
+        return make(bld, logic_and_node{lhs, rhs});
     case OrOr:
-        return bld.make(or_node{lhs, rhs});
+        return make(bld, logic_or_node{lhs, rhs});
 
     case And:
-        return bld.make(bit_and_node{lhs, rhs});
+        return make(bld, bit_and_node{lhs, rhs});
     case Xor:
-        return bld.make(bit_xor_node{lhs, rhs});
+        return make(bld, bit_xor_node{lhs, rhs});
     case Or:
-        return bld.make(bit_or_node{lhs, rhs});
+        return make(bld, bit_or_node{lhs, rhs});
 
     default:
         std::unreachable();

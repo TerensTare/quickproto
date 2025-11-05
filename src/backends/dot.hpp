@@ -36,13 +36,24 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
 
         // HACK: use a separate function to print the type
     case node_op::Proj:
-        return std::format_to(out, "[label=\"Proj({})\"]", type.type->as<int_const>()->n);
+        // return std::format_to(out, "[label=\"Proj({})\"]", type.type->as<int_const>()->n);
+        // HACK: temporary
+        return std::format_to(out, "[label=\"Proj\"]");
+
     case node_op::Const:
     {
         if (auto &&int_ = type.type->as<int_const>())
             return std::format_to(out, "[label=\"{}\"]", int_->n);
         else if (auto &&bool_ = type.type->as<bool_const>())
             return std::format_to(out, "[label=\"{}\"]", bool_->b);
+        else if (auto &&arr = type.type->as<array_type>())
+        {
+            // TODO: intern arrays to static memory on `value_type`
+            if (arr->base->as<::int_>())
+                return std::format_to(out, "[label=\"[]int\"]");
+            else if (arr->base->as<::bool_>())
+                return std::format_to(out, "[label=\"[]bool\"]");
+        }
         // TODO: implement other cases
     }
     break;

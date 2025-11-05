@@ -8,6 +8,9 @@
 #include "utils/smallvec.hpp"
 
 // TODO:
+// - figure out the layout of `Proj` nodes (where you do store the projection index?)
+// ^ are `Proj` and `Load(n)` nodes the same thing?
+// - `CallStatic` and `PureCallStatic`; the second one doesn't have an `effect` link
 // - `checked_index` by default, which can be lowered to `index` iff `index < len` is `true`
 // - optimization: Loads at an index with known type are just a `const` node
 // - no need for sized math operations, just generate a `truncate` (& ~0) node as needed and just have `Iadd`/`Uadd`/similar
@@ -102,6 +105,7 @@ enum class node_op : uint8_t
 
     Addr,  // Addr Value=someRegister
     Const, // Const Value=someValue
+    Error, // TODO: temporary hack
 };
 
 // component
@@ -142,6 +146,12 @@ struct effect final
 struct region_of_phi final
 {
     entt::entity region;
+};
+
+// component
+// present only for nodes where type checking fails (eg. trying to add a boolean to an array)
+struct error_node final
+{
 };
 
 // extra components:

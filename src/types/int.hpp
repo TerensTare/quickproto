@@ -31,28 +31,28 @@ struct int_top final : int_
     {
         return (rhs->as<int_>())
                    ? rhs
-                   : new binary_op_not_implemented_type{"+", this, rhs};
+                   : value_type::add(rhs);
     }
 
     inline value_type const *sub(value_type const *rhs) const noexcept
     {
         return (rhs->as<int_>())
                    ? rhs
-                   : new binary_op_not_implemented_type{"-", this, rhs};
+                   : value_type::sub(rhs);
     }
 
     inline value_type const *mul(value_type const *rhs) const noexcept
     {
         return (rhs->as<int_>())
                    ? rhs
-                   : new binary_op_not_implemented_type{"*", this, rhs};
+                   : value_type::mul(rhs);
     }
 
     inline value_type const *div(value_type const *rhs) const noexcept
     {
         return (rhs->as<int_>())
                    ? rhs
-                   : new binary_op_not_implemented_type{"/", this, rhs};
+                   : value_type::div(rhs);
     }
 
     inline value_type const *neg() const noexcept { return this; }
@@ -61,14 +61,42 @@ struct int_top final : int_
     {
         return (rhs->as<int_>())
                    ? bool_top::self()
-                   : new binary_op_not_implemented_type{"==", this, rhs};
+                   : value_type::eq(rhs);
+    }
+
+    inline value_type const *ne(value_type const *rhs) const noexcept
+    {
+        return (rhs->as<int_>())
+                   ? bool_top::self()
+                   : value_type::ne(rhs);
     }
 
     inline value_type const *lt(value_type const *rhs) const noexcept
     {
         return (rhs->as<int_>())
                    ? bool_top::self()
-                   : new binary_op_not_implemented_type{"<", this, rhs};
+                   : value_type::lt(rhs);
+    }
+
+    inline value_type const *le(value_type const *rhs) const noexcept
+    {
+        return (rhs->as<int_>())
+                   ? bool_top::self()
+                   : value_type::le(rhs);
+    }
+
+    inline value_type const *gt(value_type const *rhs) const noexcept
+    {
+        return (rhs->as<int_>())
+                   ? bool_top::self()
+                   : value_type::gt(rhs);
+    }
+
+    inline value_type const *ge(value_type const *rhs) const noexcept
+    {
+        return (rhs->as<int_>())
+                   ? bool_top::self()
+                   : value_type::ge(rhs);
     }
 };
 
@@ -86,28 +114,28 @@ struct int_bot final : int_
     {
         return rhs->as<int_>()
                    ? (value_type const *)this
-                   : new binary_op_not_implemented_type{"+", this, rhs};
+                   : value_type::add(rhs);
     }
 
     inline value_type const *sub(value_type const *rhs) const noexcept
     {
         return rhs->as<int_>()
                    ? (value_type const *)this
-                   : new binary_op_not_implemented_type{"-", this, rhs};
+                   : value_type::sub(rhs);
     }
 
     inline value_type const *mul(value_type const *rhs) const noexcept
     {
         return rhs->as<int_>()
                    ? (value_type const *)this
-                   : new binary_op_not_implemented_type{"*", this, rhs};
+                   : value_type::mul(rhs);
     }
 
     inline value_type const *div(value_type const *rhs) const noexcept
     {
         return rhs->as<int_>()
                    ? (value_type const *)this
-                   : new binary_op_not_implemented_type{"/", this, rhs};
+                   : value_type::div(rhs);
     }
 
     inline value_type const *neg() const noexcept { return this; }
@@ -116,35 +144,63 @@ struct int_bot final : int_
     {
         return rhs->as<int_>()
                    ? (value_type const *)this
-                   : new binary_op_not_implemented_type{"==", this, rhs};
+                   : value_type::eq(rhs);
+    }
+
+    inline value_type const *ne(value_type const *rhs) const noexcept
+    {
+        return rhs->as<int_>()
+                   ? (value_type const *)this
+                   : value_type::ne(rhs);
     }
 
     inline value_type const *lt(value_type const *rhs) const noexcept
     {
         return rhs->as<int_>()
                    ? (value_type const *)this
-                   : new binary_op_not_implemented_type{"<", this, rhs};
+                   : value_type::lt(rhs);
+    }
+
+    inline value_type const *le(value_type const *rhs) const noexcept
+    {
+        return rhs->as<int_>()
+                   ? (value_type const *)this
+                   : value_type::le(rhs);
+    }
+
+    inline value_type const *gt(value_type const *rhs) const noexcept
+    {
+        return rhs->as<int_>()
+                   ? (value_type const *)this
+                   : value_type::gt(rhs);
+    }
+
+    inline value_type const *ge(value_type const *rhs) const noexcept
+    {
+        return rhs->as<int_>()
+                   ? (value_type const *)this
+                   : value_type::ge(rhs);
     }
 
     inline value_type const *band(value_type const *rhs) const noexcept
     {
         return rhs->as<int_>()
                    ? (value_type const *)this
-                   : new binary_op_not_implemented_type{"&", this, rhs};
+                   : value_type::band(rhs);
     }
 
     inline value_type const *bxor(value_type const *rhs) const noexcept
     {
         return rhs->as<int_>()
                    ? (value_type const *)this
-                   : new binary_op_not_implemented_type{"^", this, rhs};
+                   : value_type::bxor(rhs);
     }
 
     inline value_type const *bor(value_type const *rhs) const noexcept
     {
         return rhs->as<int_>()
                    ? (value_type const *)this
-                   : new binary_op_not_implemented_type{"|", this, rhs};
+                   : value_type::bor(rhs);
     }
 };
 
@@ -169,7 +225,7 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"+", this, rhs};
+            return value_type::add(rhs);
     }
 
     inline value_type const *sub(value_type const *rhs) const noexcept
@@ -181,7 +237,7 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"-", this, rhs};
+            return value_type::sub(rhs);
     }
 
     inline value_type const *mul(value_type const *rhs) const noexcept
@@ -193,7 +249,7 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"*", this, rhs};
+            return value_type::mul(rhs);
     }
 
     inline value_type const *div(value_type const *rhs) const noexcept
@@ -205,7 +261,7 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"/", this, rhs};
+            return value_type::div(rhs);
     }
 
     inline value_type const *neg() const noexcept { return new int_const{-n}; }
@@ -219,7 +275,19 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return bool_top::self();
         else
-            return new binary_op_not_implemented_type{"==", this, rhs};
+            return value_type::eq(rhs);
+    }
+
+    inline value_type const *ne(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_bot>())
+            return bool_bot::self();
+        else if (auto ptr = rhs->as<int_const>(); ptr)
+            return new bool_const{n != ptr->n};
+        else if (rhs->as<int_top>())
+            return bool_top::self();
+        else
+            return value_type::ne(rhs);
     }
 
     inline value_type const *lt(value_type const *rhs) const noexcept
@@ -231,7 +299,43 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return bool_top::self();
         else
-            return new binary_op_not_implemented_type{"<", this, rhs};
+            return value_type::lt(rhs);
+    }
+
+    inline value_type const *le(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_bot>())
+            return bool_bot::self();
+        else if (auto ptr = rhs->as<int_const>(); ptr)
+            return new bool_const{n <= ptr->n};
+        else if (rhs->as<int_top>())
+            return bool_top::self();
+        else
+            return value_type::le(rhs);
+    }
+
+    inline value_type const *gt(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_bot>())
+            return bool_bot::self();
+        else if (auto ptr = rhs->as<int_const>(); ptr)
+            return new bool_const{n > ptr->n};
+        else if (rhs->as<int_top>())
+            return bool_top::self();
+        else
+            return value_type::gt(rhs);
+    }
+
+    inline value_type const *ge(value_type const *rhs) const noexcept
+    {
+        if (rhs->as<int_bot>())
+            return bool_bot::self();
+        else if (auto ptr = rhs->as<int_const>(); ptr)
+            return new bool_const{n >= ptr->n};
+        else if (rhs->as<int_top>())
+            return bool_top::self();
+        else
+            return value_type::ge(rhs);
     }
 
     inline value_type const *band(value_type const *rhs) const noexcept
@@ -243,7 +347,7 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"&", this, rhs};
+            return value_type::band(rhs);
     }
 
     inline value_type const *bxor(value_type const *rhs) const noexcept
@@ -255,7 +359,7 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"^", this, rhs};
+            return value_type::bxor(rhs);
     }
 
     inline value_type const *bor(value_type const *rhs) const noexcept
@@ -267,7 +371,7 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"|", this, rhs};
+            return value_type::bor(rhs);
     }
 
     int64_t n;

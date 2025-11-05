@@ -4,6 +4,7 @@
 #include <span>
 
 // TODO:
+// - rhs <op> bot is not an error
 // - `index_as_const`
 // - have a common interface for operators, then each sub-type implements its own version
 // ^ eg. `add` is `+`, but `int + int` is `iadd`
@@ -22,13 +23,14 @@
 // - maybe handle operators using a function table, rather than letting the type handle them?
 // - rename `value_type` to `type`
 
-// TODO: & &= | |= ^ ^=
-
 struct value_type
 {
     // TODO: T: value_type
     template <typename T>
     inline T const *as() const noexcept { return dynamic_cast<T const *>(this); }
+
+    // HACK: do something better here
+    virtual bool is_const() const { return false; }
 
     // TODO: recheck this
     // lhs = rhs
@@ -101,11 +103,23 @@ struct bot_type final : value_type
         return &ty;
     }
 
+    // TODO: overload other calls too and figure out their type
+    // TODO: should lazy nodes be `lazy` or `bot`?
+
+    inline value_type const *neg() const noexcept { return this; }
+    inline value_type const *unot() const noexcept { return this; }
+
     char const *name() const noexcept { return "{unknown}"; }
 };
 
+// Error that happens during the typecheck stage.
+// TODO: improve the interface of this
+struct value_error : value_type
+{
+};
+
 // signals that this unary operator is not implemented
-struct unary_op_not_implemented_type final : value_type
+struct unary_op_not_implemented_type final : value_error
 {
     // TODO: these should be values, but not errors, right?
     inline unary_op_not_implemented_type(char const *op, value_type const *sub) noexcept
@@ -119,7 +133,7 @@ struct unary_op_not_implemented_type final : value_type
 };
 
 // signals that this binary operator is not implemented
-struct binary_op_not_implemented_type final : value_type
+struct binary_op_not_implemented_type final : value_error
 {
     // TODO: these should be values, but not errors, right?
     inline binary_op_not_implemented_type(char const *op, value_type const *lhs, value_type const *rhs) noexcept
@@ -148,25 +162,92 @@ struct binary_op_not_implemented_type final : value_type
     value_type const *rhs;
 };
 
-inline value_type const *value_type::assign(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"=", this, rhs}; }
+inline value_type const *value_type::assign(value_type const *rhs) const noexcept
+{
+    return rhs->as<bot_type>()
+               ? rhs
+               : new binary_op_not_implemented_type{"=", this, rhs};
+}
 
-inline value_type const *value_type::add(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"+", this, rhs}; }
-inline value_type const *value_type::sub(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"-", this, rhs}; }
-inline value_type const *value_type::mul(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"*", this, rhs}; }
-inline value_type const *value_type::div(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"/", this, rhs}; }
+inline value_type const *value_type::add(value_type const *rhs) const noexcept
+{
+    return rhs->as<bot_type>()
+               ? rhs
+               : new binary_op_not_implemented_type{"+", this, rhs};
+}
+
+inline value_type const *value_type::sub(value_type const *rhs) const noexcept
+{
+    return rhs->as<bot_type>()
+               ? rhs
+               : new binary_op_not_implemented_type{"-", this, rhs};
+}
+
+inline value_type const *value_type::mul(value_type const *rhs) const noexcept
+{
+    return rhs->as<bot_type>()
+               ? rhs
+               : new binary_op_not_implemented_type{"*", this, rhs};
+}
+
+inline value_type const *value_type::div(value_type const *rhs) const noexcept
+{
+    return rhs->as<bot_type>()
+               ? rhs
+               : new binary_op_not_implemented_type{"/", this, rhs};
+}
 
 inline value_type const *value_type::neg() const noexcept { return new unary_op_not_implemented_type{"-", this}; }
 inline value_type const *value_type::bnot() const noexcept { return new unary_op_not_implemented_type{"!", this}; }
 
-inline value_type const *value_type::eq(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"==", this, rhs}; }
-inline value_type const *value_type::lt(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"<", this, rhs}; }
+inline value_type const *value_type::eq(value_type const *rhs) const noexcept
+{
+    return rhs->as<bot_type>()
+               ? rhs
+               : new binary_op_not_implemented_type{"==", this, rhs};
+}
 
-inline value_type const *value_type::logic_and(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"&&", this, rhs}; }
-inline value_type const *value_type::logic_or(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"||", this, rhs}; }
+inline value_type const *value_type::lt(value_type const *rhs) const noexcept
+{
+    return rhs->as<bot_type>()
+               ? rhs
+               : new binary_op_not_implemented_type{"<", this, rhs};
+}
 
-inline value_type const *value_type::band(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"&", this, rhs}; }
-inline value_type const *value_type::bxor(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"^", this, rhs}; }
-inline value_type const *value_type::bor(value_type const *rhs) const noexcept { return new binary_op_not_implemented_type{"|", this, rhs}; }
+inline value_type const *value_type::logic_and(value_type const *rhs) const noexcept
+{
+    return rhs->as<bot_type>()
+               ? rhs
+               : new binary_op_not_implemented_type{"&&", this, rhs};
+}
+
+inline value_type const *value_type::logic_or(value_type const *rhs) const noexcept
+{
+    return rhs->as<bot_type>()
+               ? rhs
+               : new binary_op_not_implemented_type{"||", this, rhs};
+}
+
+inline value_type const *value_type::band(value_type const *rhs) const noexcept
+{
+    return rhs->as<bot_type>()
+               ? rhs
+               : new binary_op_not_implemented_type{"&", this, rhs};
+}
+
+inline value_type const *value_type::bxor(value_type const *rhs) const noexcept
+{
+    return rhs->as<bot_type>()
+               ? rhs
+               : new binary_op_not_implemented_type{"^", this, rhs};
+}
+
+inline value_type const *value_type::bor(value_type const *rhs) const noexcept
+{
+    return rhs->as<bot_type>()
+               ? rhs
+               : new binary_op_not_implemented_type{"|", this, rhs};
+}
 
 // TODO: use a custom error for this
 inline value_type const *value_type::call(std::span<value_type const *> args) const noexcept { return new unary_op_not_implemented_type{"()", this}; }

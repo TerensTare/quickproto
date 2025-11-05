@@ -6,6 +6,7 @@
 #include "nodes.hpp"
 
 // TODO:
+// - do not cut error nodes during DCE
 /*
     scope-based tiered visibility marking:
     - reachable: exported names and everything left by DCE
@@ -87,15 +88,6 @@ struct builder final
               .pool = &reg.storage<void>((entt::id_type)visibility::maybe_reachable),
           }
     {
-    }
-
-    template <typename T>
-    inline entt::entity make(T const &t) noexcept
-        requires requires {
-            { ::make(*this, t) } -> std::same_as<entt::entity>;
-        }
-    {
-        return ::make(*this, t);
     }
 
     // invariant: The returned entity has the following components:

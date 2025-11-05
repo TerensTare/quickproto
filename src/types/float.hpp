@@ -30,28 +30,28 @@ struct float_top final : float_
     {
         return (rhs->as<float_>())
                    ? rhs
-                   : new binary_op_not_implemented_type{"+", this, rhs};
+                   : value_type::add(rhs);
     }
 
     inline value_type const *sub(value_type const *rhs) const noexcept
     {
         return (rhs->as<float_>())
                    ? rhs
-                   : new binary_op_not_implemented_type{"-", this, rhs};
+                   : value_type::sub(rhs);
     }
 
     inline value_type const *mul(value_type const *rhs) const noexcept
     {
         return (rhs->as<float_>())
                    ? rhs
-                   : new binary_op_not_implemented_type{"*", this, rhs};
+                   : value_type::mul(rhs);
     }
 
     inline value_type const *div(value_type const *rhs) const noexcept
     {
         return (rhs->as<float_>())
                    ? rhs
-                   : new binary_op_not_implemented_type{"/", this, rhs};
+                   : value_type::div(rhs);
     }
 
     inline value_type const *neg() const noexcept { return this; }
@@ -60,14 +60,14 @@ struct float_top final : float_
     {
         return (rhs->as<float_>())
                    ? bool_top::self()
-                   : new binary_op_not_implemented_type{"==", this, rhs};
+                   : value_type::eq(rhs);
     }
 
     inline value_type const *lt(value_type const *rhs) const noexcept
     {
         return (rhs->as<float_>())
                    ? bool_top::self()
-                   : new binary_op_not_implemented_type{"<", this, rhs};
+                   : value_type::lt(rhs);
     }
 };
 
@@ -97,6 +97,8 @@ struct float32 final : float_
 {
     explicit float32(float f) noexcept : f{f} {}
 
+    inline bool is_const() const { return true; }
+
     // impl value_type
     inline value_type const *add(value_type const *rhs) const noexcept
     {
@@ -107,7 +109,7 @@ struct float32 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"+", this, rhs};
+            return value_type::add(rhs);
     }
 
     inline value_type const *sub(value_type const *rhs) const noexcept
@@ -119,7 +121,7 @@ struct float32 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"-", this, rhs};
+            return value_type::sub(rhs);
     }
 
     inline value_type const *mul(value_type const *rhs) const noexcept
@@ -131,7 +133,7 @@ struct float32 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"*", this, rhs};
+            return value_type::mul(rhs);
     }
 
     inline value_type const *div(value_type const *rhs) const noexcept
@@ -143,7 +145,7 @@ struct float32 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"/", this, rhs};
+            return value_type::div(rhs);
     }
 
     inline value_type const *neg() const noexcept { return new float32{-f}; }
@@ -157,7 +159,7 @@ struct float32 final : float_
         else if (rhs->as<float_top>())
             return bool_top::self();
         else
-            return new binary_op_not_implemented_type{"==", this, rhs};
+            return value_type::eq(rhs);
     }
 
     inline value_type const *lt(value_type const *rhs) const noexcept
@@ -169,7 +171,7 @@ struct float32 final : float_
         else if (rhs->as<float_top>())
             return bool_top::self();
         else
-            return new binary_op_not_implemented_type{"<", this, rhs};
+            return value_type::lt(rhs);
     }
 
     inline char const *name() const noexcept final { return "float32"; }
@@ -181,6 +183,8 @@ struct float64 final : float_
 {
     explicit float64(double d) noexcept : d{d} {}
 
+    inline bool is_const() const { return true; }
+
     // impl value_type
     inline value_type const *add(value_type const *rhs) const noexcept
     {
@@ -191,7 +195,7 @@ struct float64 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"+", this, rhs};
+            return value_type::add(rhs);
     }
 
     inline value_type const *sub(value_type const *rhs) const noexcept
@@ -203,7 +207,7 @@ struct float64 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"-", this, rhs};
+            return value_type::sub(rhs);
     }
 
     inline value_type const *mul(value_type const *rhs) const noexcept
@@ -215,7 +219,7 @@ struct float64 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"*", this, rhs};
+            return value_type::mul(rhs);
     }
 
     inline value_type const *div(value_type const *rhs) const noexcept
@@ -227,7 +231,7 @@ struct float64 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return new binary_op_not_implemented_type{"/", this, rhs};
+            return value_type::div(rhs);
     }
 
     inline value_type const *neg() const noexcept { return new float64{-d}; }
@@ -241,7 +245,7 @@ struct float64 final : float_
         else if (rhs->as<float_top>())
             return bool_top::self();
         else
-            return new binary_op_not_implemented_type{"==", this, rhs};
+            return value_type::eq(rhs);
     }
 
     inline value_type const *lt(value_type const *rhs) const noexcept
@@ -253,7 +257,7 @@ struct float64 final : float_
         else if (rhs->as<float_top>())
             return bool_top::self();
         else
-            return new binary_op_not_implemented_type{"<", this, rhs};
+            return value_type::lt(rhs);
     }
 
     inline char const *name() const noexcept final { return "float64"; }
