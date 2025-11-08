@@ -26,8 +26,13 @@
 #include "nodegen/neg.hpp"
 #include "nodegen/not.hpp"
 
+
 // control flow
 #include "nodegen/exit.hpp"
+#include "nodegen/region.hpp"
+#include "nodegen/return.hpp"
 #include "nodegen/return_phi.hpp"
 
+// other
+#include "nodegen/call_static.hpp"
 #include "nodegen/value.hpp"

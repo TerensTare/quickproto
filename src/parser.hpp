@@ -11,9 +11,9 @@
 #include "types/all.hpp"
 
 // TODO:
+// - `then` should probably accept a `stacklist` for return instead; this solves the multi-return problem + marking return as `entt::null`
 // - have a typecheck phase right before codegen that fires out errors related to type checking
 // ^ then you remove all the errors from `value_type`, as they should be handled on this phase instead
-// ^ as long as you load a constant
 // - inline loads from values at the same scope level (eg. loading globals in global scope or locals in local scope)
 // - define function names only after they are fully parsed
 // ^ in the meantime you can mark their call occurrences as `unresolved` and resolve later
@@ -255,24 +255,6 @@ private:
 
     inline void merge(scope &parent, scope const &lhs, scope const &rhs) noexcept;
 
-    inline entt::entity region(entt::entity then_state, entt::entity else_state) noexcept
-    {
-
-        // TODO: does this part belong here?
-        // TODO: only add one region at the end; when the whole `if-else` tree is parsed
-        // ^ even if there is just an `if` branch, the `else` is implicit on both `Region` and `Phi`, you just need to figure out its value on both cases
-        // ^ (maybe) this can be done by a pass instead?
-        entt::entity const region_children[]{then_state, else_state};
-        // TODO: the nodes should be effect nodes, not input nodes
-        auto const region = bld.make(node_op::Region, region_children);
-        mem_state = region; // TODO: should this be here?
-        return region;
-        // TODO:
-        // - spawn a Region node here that links to the if/else branches or just the `If`
-        // ^ also take care to handle multiple if-else case
-        // - spawn a Phi node for merging values
-    }
-
     // merge `lhs` and `rhs` into a new phi node if either of the nodes is different from `old` and return it, otherwise return `old`
     // TODO: if no `else` branch, `rhs` should be `old`
     // TODO: move this on the builder API
@@ -298,10 +280,16 @@ private:
     // codegen the `Start` and `Exit` nodes of the program, pass the control flow to `main` (and initializing globals when added).
     inline void codegen_main() noexcept;
 
-    // report any errors from the type checking phase
-    inline void report_errors();
-
     // parsing helpers
+
+    // TODO: eventually pass a span here instead of token
+    [[noreturn]]
+    inline void fail(token const &t, std::string_view msg) const
+    {
+        auto const code = scan.lexeme(t);
+        std::println("{}\n    {}\n    ^", "Unexpected token.", code);
+        std::exit(-1);
+    }
 
     inline token eat(token_kind kind) noexcept;
     inline token eat(std::span<token_kind const> kinds) noexcept;
@@ -337,10 +325,13 @@ inline entt::entity parser::call(entt::entity base) noexcept
     // codegen
 
     // TODO: is this correct? (consider for example, a call is made inside an `If`)
-    auto const call = bld.make(node_op::CallStatic, ins);
+    auto const call = make(bld, call_static_node{
+                                    .mem_state = mem_state,
+                                    .func = base,
+                                    .args = ins,
+                                });
     // TODO: the call should probably modify just the memory node, not the control flow node
     // TODO: the call should probably link to the `Return` node of the called function, not the `Start`
-    bld.reg.emplace<effect>(call, mem_state);
 
     // TODO: is this correct? (only if there is a side effect)
     mem_state = call;
@@ -465,8 +456,8 @@ inline entt::entity parser::primary() noexcept
         // TODO: you also now need a `meet` operation to give the common lowest type between two given types
         // TODO: hack, make the correct node
         // TODO: typecheck that sizes match on `var_decl`
-        auto const ret = bld.make(node_op::Const);
-        bld.reg.get<node_type>(ret).type = new ::array_type{bld.reg.get<node_type const>(init[0]).type, init.n};
+        auto arrty = new ::array_type{bld.reg.get<node_type const>(init[0]).type, init.n};
+        auto const ret = make(bld, value_node{arrty});
         return call_index_or_self(ret);
     }
 
@@ -667,7 +658,7 @@ inline entt::entity parser::if_stmt() noexcept
                                    {
                                        eat(token_kind::Semicolon); // ';'
 
-                                       mem_state = region(then_state, mem_state);
+                                       mem_state = make(bld, region_node{then_state, mem_state});
 
                                        // TODO: all this is common on both branches
                                        // TODO: is this correct? (from here to return)
@@ -690,7 +681,8 @@ inline entt::entity parser::if_stmt() noexcept
             {
                 eat(token_kind::Semicolon); // ';'
 
-                mem_state = region(then_state, mem_state);
+                mem_state = make(bld, region_node{then_state, mem_state});
+                merge(*env.top, *then_env, *env.top); // TODO: is this correct?
 
                 // TODO: implement
                 // TODO: also merge `then_env` with `env.top` in this case
@@ -813,7 +805,7 @@ inline entt::entity parser::simple_stmt() noexcept
         return compound_assign(ids);
 
     default:
-        fail("Expected one of the following: `:=`, `++`, `--`, `+=`, `-=`, `*=`, `/=`");
+        fail(scan.peek, "Expected one of the following: `:=`, `++`, `--`, `+=`, `-=`, `*=`, `/=`");
         return entt::null;
         // TODO: return an "error type" (top I guess?)
     }
@@ -953,9 +945,7 @@ inline void parser::func_decl() noexcept
 
                                // TODO: handle multi-return case
                                entt::entity const params[]{ret};
-                               auto const out = bld.make(node_op::Return, std::span(params, ret != entt::null));
-                               // TODO: recheck this
-                               (void)bld.reg.get_or_emplace<effect>(out, mem_state);
+                               auto const out = make(bld, return_node{mem_state, params});
 
                                // TODO: move this to a function
                                // TODO: handle assignment to constants
@@ -1011,24 +1001,19 @@ inline void parser::decl() noexcept
     switch (scan.peek.kind)
     {
     case token_kind::KwConst:
-        const_decl();
-        break;
+        return const_decl();
 
     case token_kind::KwFunc:
-        func_decl();
-        break;
+        return func_decl();
 
     case token_kind::KwVar:
-        var_decl();
-        break;
+        return var_decl();
 
     case token_kind::Eof:
-        codegen_main();
-        break;
+        return codegen_main();
 
     default:
-        fail("Expected `func` or <EOF>");
-        break;
+        return fail(scan.peek, "Expected `func` or <EOF>");
     }
 }
 
@@ -1105,7 +1090,7 @@ inline value_type const *parser::type() noexcept
         return named_type();
 
     default:
-        fail("Expected `[' or <identifier>");
+        fail(scan.peek, "Expected `[' or <identifier>");
     }
 }
 
@@ -1138,6 +1123,7 @@ inline value_type const *parser::named_type() noexcept
 
 inline void parser::codegen_main() noexcept
 {
+    // TODO: most of these checks should be node by `call_static`
     auto const main_iter = env.top->defs.find(std::string_view{"main"});
     ensure(main_iter != env.top->defs.end(), "Program does not define a main function!");
     auto const main_node = main_iter->second;
@@ -1148,46 +1134,43 @@ inline void parser::codegen_main() noexcept
     ensure(main_func->n_params == 0, "Function `main` cannot have parameters!");
 
     entt::entity const main_ins[]{main_node};
-    auto const call_main = bld.make(node_op::CallStatic, main_ins);
-    bld.reg.get_or_emplace<effect>(call_main).target = mem_state; // TODO: this `mem_state` is not the global one, restore global state after every `decl`
+    auto const call_main = make(bld, call_static_node{
+                                         .mem_state = mem_state,
+                                         .func = main_node,
+                                         .args = main_ins,
+                                     });
     // TODO: is this correct?
     mem_state = call_main;
 
     // TODO: is this correct?
-    auto const exit = make(bld, exit_node{.mem_state = mem_state, .code = 0});
+    auto const exit = make(bld, exit_node{
+                                    .mem_state = mem_state,
+                                    .code = 0,
+                                });
     // TODO: DCE on unused functions
 
     bld.pop_vis(); // just for correctness
-
-    // TODO: do you report once per program, once per global declaration, etc?
-    report_errors();
-}
-
-inline void parser::report_errors()
-{
-    for (auto &&[id, ty] : bld.reg.view<error_node const, node_type const>().each())
-    {
-        // HACK
-        // TODO: structured error messages
-        if (auto b = ty.type->as<binary_op_not_implemented_type>())
-        {
-            std::println("Cannot do {} {} {}!", b->lhs->name(), b->op, b->rhs->name());
-        }
-        else if (auto u = ty.type->as<unary_op_not_implemented_type>())
-        {
-            std::println("Cannot do {}{}!", u->op, u->sub->name());
-        }
-    }
-
-    bld.reg.clear<error_node>();
 }
 
 // parsing helpers
 
 inline token parser::eat(token_kind kind) noexcept
 {
-    ensure(scan.peek.kind == kind, "Unexpected token kind");
-    return scan.next();
+    if (scan.peek.kind == kind)
+        return scan.next();
+
+    // TODO: unified error interface
+    fail(scan.peek, "Unexpected token.");
+}
+
+inline token parser::eat(std::span<token_kind const> kinds) noexcept
+{
+    for (auto k : kinds)
+        if (scan.peek.kind == k)
+            return scan.next();
+
+    // TODO: unified error interface
+    fail(scan.peek, "Unexpected token.");
 }
 
 inline void parser::merge(scope &parent, scope const &lhs, scope const &rhs) noexcept
@@ -1208,15 +1191,6 @@ inline void parser::merge(scope &parent, scope const &lhs, scope const &rhs) noe
         auto const node = phi(value, left, right);
         value = node;
     }
-}
-
-inline token parser::eat(std::span<token_kind const> kinds) noexcept
-{
-    for (auto k : kinds)
-        if (scan.peek.kind == k)
-            return scan.next();
-
-    fail("Unexpected token kind out of list");
 }
 
 inline entt::entity parser::binary_node(token_kind kind, entt::entity lhs, entt::entity rhs) noexcept

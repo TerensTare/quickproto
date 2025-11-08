@@ -1,8 +1,9 @@
 
 #pragma once
 
-#include <concepts>
 #include <entt/entity/registry.hpp>
+
+#include "base.hpp"
 #include "nodes.hpp"
 
 // TODO:
@@ -19,8 +20,6 @@
 // ^ allocate everything on an allocator, keep builder and graph trivial
 // - make `StartNode` hold `$ctrl; params...` as input and use `$ctrl`, `params...` as normal
 // - `Store` should be `Store(memory, proj, value)`
-// - move passes to `builder` instead of `parser` and run on each node parsed
-// - build-from-blueprint style for less error-prone code + it might help with defining passes
 
 inline value_type const *type_by_op(node_op op) noexcept
 {
@@ -118,6 +117,8 @@ struct builder final
     // TODO: ensure not null
     inline void pop_vis() { scopes = scopes->prev; }
 
+    inline void report_errors();
+
     // TODO: is there any node (other than `Region`) with more than 1 effect dependency?
     entt::registry reg;
     scope_visibility global;
@@ -143,9 +144,35 @@ inline entt::entity builder::make(node_op op, std::span<entt::entity const> nins
     return n;
 }
 
+inline void builder::report_errors()
+{
+    for (auto &&[id, ty] : reg.view<error_node const, node_type const>().each())
+    {
+        // HACK
+        // TODO: structured error messages
+        if (auto b = ty.type->as<binary_op_not_implemented_type>())
+        {
+            std::println("Cannot do {} {} {}!", b->lhs->name(), b->op, b->rhs->name());
+        }
+        else if (auto u = ty.type->as<unary_op_not_implemented_type>())
+        {
+            std::println("Cannot do {}{}!", u->op, u->sub->name());
+        }
+        else
+        {
+            fail("Internal compiler error: unhandled error type");
+        }
+    }
+
+    reg.clear<error_node>();
+}
+
 // TODO: this again, but for global nodes
 inline void prune_dead_code(builder &bld, entt::entity ret) noexcept
 {
+    // TODO: should this be here or somewhere else?
+    bld.report_errors();
+
     auto &&new_nodes = bld.reg.storage<void>((entt::id_type)visibility::maybe_reachable);
     auto &&visited = bld.reg.storage<void>((entt::id_type)visibility::reachable);
 
