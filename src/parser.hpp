@@ -173,11 +173,11 @@ struct parser final
     // expr comp_op expr ';' stmt
     // comp_op ::= '+=' | '-=' | '*=' | '/=' | '&=' | '^=' | '|='
     [[nodiscard]]
-    inline entt::entity compound_assign(std::span<token const> ids) noexcept;
+    inline entt::entity compound_assign(token id) noexcept;
     // expr post_op ';' stmt
     // post_op ::= '++' | '--'
     [[nodiscard]]
-    inline entt::entity post_op(std::span<token const> ids) noexcept;
+    inline entt::entity post_op(token id) noexcept;
 
     // 'if' expr block ('else' ( if_stmt | block ))? ';' stmt
     [[nodiscard]]
@@ -286,8 +286,42 @@ private:
     [[noreturn]]
     inline void fail(token const &t, std::string_view msg) const
     {
-        auto const code = scan.lexeme(t);
-        std::println("{}\n    {}\n    ^", "Unexpected token.", code);
+        std::string_view txt{scan.text, t.start};
+        auto const start = txt.rfind('\n') + 1;
+
+        auto end = t.start;
+        while (scan.text[end])
+        {
+            if (scan.text[end++] == '\n')
+                break;
+        }
+
+        --end; // if no '\n', go to last character, otherwise go before the '\n'
+
+        size_t line_num = 1, iter = 0;
+        while (std::string_view::npos != (iter = txt.find('\n')))
+        {
+            ++line_num;
+            txt = txt.substr(iter + 1);
+        }
+
+        // TODO: clamp the [start, end) range to, say 80 characters or maybe based on token?
+
+        auto const lcode = std::string_view{scan.text + start, t.start - start};
+        auto const ecode = std::string_view{scan.text + t.start, t.len};
+        auto const rcode = std::string_view{scan.text + t.start + t.len, end - (t.start + t.len)};
+
+        auto ok_part = std::format("{} |{}", line_num, lcode);
+
+        std::println(
+            "{}:{}:{}: {}.\n\n{}\033[31m{}\033[0m{}\n{:>{}}^--",
+            // TODO: use actual file name
+            "<source>", line_num, t.start - start,
+            msg, ok_part, ecode, rcode,
+            "", ok_part.size() //
+        );
+        // TODO: do something cross-platform
+        __debugbreak();
         std::exit(-1);
     }
 
@@ -527,7 +561,7 @@ inline entt::entity parser::local_decl(std::span<token const> ids) noexcept
     return stmt();
 }
 
-inline entt::entity parser::compound_assign(std::span<token const> ids) noexcept
+inline entt::entity parser::compound_assign(token id) noexcept
 {
     // TODO:
     // - the assignment should be evaluated RTL
@@ -546,43 +580,43 @@ inline entt::entity parser::compound_assign(std::span<token const> ids) noexcept
 
     auto const optok = eat(ops).kind; // compound_op
 
+    // TODO: handle multi-expression case
     auto const rhs = expr(); // expr
 
     eat(token_kind::Semicolon); // ';'
 
     // codegen
-    auto const node_op =
-        optok == token_kind::PlusEqual
-            ? node_op::Add
-        : optok == token_kind::MinusEqual
-            ? node_op::Sub
-        : optok == token_kind::StarEqual
-            ? node_op::Mul
-        : optok == token_kind::SlashEqual
-            ? node_op::Div
-        : optok == token_kind::AndEqual
-            ? node_op::BitAnd
-        : optok == token_kind::XorEqual
-            ? node_op::BitXor
-            : node_op::BitOr;
 
     // TODO: do NOT use the lexeme here, use the address of lhs (eg. `a.b` is not a single token)
-    auto const name = scan.lexeme(ids[0]);
+    auto const name = scan.lexeme(id);
 
     // TODO: use an actual address here
     // TODO: figure out the type of the node
     // auto const res = bld.makeval(op::Addr, int_bot::self(), {.i64 = 0});
 
-    entt::entity const ins[]{env.get_var(name), rhs};
-    auto const opnode = bld.make(node_op, ins);
-    // TODO: fold `opnode` if possible
-    // opnode = passes.run(opnode);
+    auto const lhs = env.get_var(name);
+
+    auto const opnode =
+        optok == token_kind::PlusEqual
+            ? make(bld, add_node{lhs, rhs})
+        : optok == token_kind::MinusEqual
+            ? make(bld, sub_node{lhs, rhs})
+        : optok == token_kind::StarEqual
+            ? make(bld, mul_node{lhs, rhs})
+        : optok == token_kind::SlashEqual
+            ? make(bld, div_node{lhs, rhs})
+        : optok == token_kind::AndEqual
+            ? make(bld, bit_and_node{lhs, rhs})
+        : optok == token_kind::XorEqual
+            ? make(bld, bit_xor_node{lhs, rhs})
+            : make(bld, bit_or_node{lhs, rhs});
 
     env.set_var(name, opnode);
+
     return stmt();
 }
 
-inline entt::entity parser::post_op(std::span<token const> ids) noexcept
+inline entt::entity parser::post_op(token id) noexcept
 {
     // parsing
 
@@ -593,11 +627,11 @@ inline entt::entity parser::post_op(std::span<token const> ids) noexcept
 
     auto const optok = eat(ops).kind;
 
-    eat(token_kind::Semicolon);
+    eat(token_kind::Semicolon); // ;
 
     // codegen
     // TODO: do NOT use the lexeme here, use the address of the result
-    auto const name = scan.lexeme(ids[0]);
+    auto const name = scan.lexeme(id);
 
     // TODO: use an actual address here
     // TODO: figure out the type of the node
@@ -795,19 +829,26 @@ inline entt::entity parser::simple_stmt() noexcept
         return local_decl(ids);
 
     case token_kind::PlusPlus:
+        if (ids.size() != 1)
+            fail(scan.peek, "Unexpected `++` after expression list");
     case token_kind::MinusMinus:
-        return post_op(ids);
+        if (ids.size() != 1)
+            fail(scan.peek, "Unexpected `--` after expression list");
+
+        return post_op(ids[0]);
 
     case token_kind::PlusEqual:
     case token_kind::MinusEqual:
     case token_kind::StarEqual:
     case token_kind::SlashEqual:
-        return compound_assign(ids);
+        if (ids.size() != 1)
+            fail(scan.peek, "Unexpected compound assignment after expression list");
+
+        return compound_assign(ids[0]);
 
     default:
         fail(scan.peek, "Expected one of the following: `:=`, `++`, `--`, `+=`, `-=`, `*=`, `/=`");
         return entt::null;
-        // TODO: return an "error type" (top I guess?)
     }
 }
 
@@ -857,7 +898,7 @@ inline void parser::const_decl() noexcept
     auto const name = eat(token_kind::Ident); // <ident>
     eat(token_kind::Equal);                   // '='
     auto const init = expr();                 // expr
-    eat(token_kind::Semicolon);               // ';'
+    eat(token_kind::Semicolon);               // ;
 
     // TODO: do you need to codegen `Store` for all kinds of constants?
     // TODO: link a `Proj` node from the global `State`
@@ -940,8 +981,7 @@ inline void parser::func_decl() noexcept
     // TODO: is this actually the `Return` node?
     auto const ret = block([&](scope const *func_env, entt::entity ret)
                            {
-                               // TODO: is this correct here?
-                               eat(token_kind::Semicolon); // ';'
+                               eat(token_kind::Semicolon); // ;
 
                                // TODO: handle multi-return case
                                entt::entity const params[]{ret};
@@ -950,6 +990,7 @@ inline void parser::func_decl() noexcept
                                // TODO: move this to a function
                                // TODO: handle assignment to constants
                                // TODO: only merge variables, not functions/types, etc.
+                               // TODO: codegen loads + stores
                                // TODO: is there any in-between scope that has not been merged?
                                for (auto &&[name, id] : env.top->defs)
                                {
@@ -970,12 +1011,16 @@ inline void parser::func_decl() noexcept
 
 inline void parser::var_decl() noexcept
 {
+    // parsing
+
     eat(token_kind::KwVar);                   // 'var'
     auto const name = eat(token_kind::Ident); // <ident>
     auto const ty = type();                   // type
     eat(token_kind::Equal);                   // '='
     auto const init = expr();                 // expr
-    eat(token_kind::Semicolon);               // ';'
+    eat(token_kind::Semicolon);               // ;
+
+    // codegen
 
     // TODO: typecheck that rhs matches lhs using `value_type.assign`
 
@@ -983,6 +1028,8 @@ inline void parser::var_decl() noexcept
     // TODO: link a `Proj` node from the global `State` as input
     entt::entity const ins[]{init};
     auto const store = bld.make(node_op::Store, ins);
+    // TODO: is this correct?
+    bld.reg.get<node_type>(store).type = bld.reg.get<node_type>(init).type;
     bld.reg.get_or_emplace<effect>(store).target = mem_state;
     mem_state = store;
 

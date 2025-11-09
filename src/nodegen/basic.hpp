@@ -19,7 +19,7 @@ using type_storage = entt::storage_for_t<node_type>;
 template <typename T>
 concept nodegen = requires(T const &t, builder &bld, type_storage const &types) {
     { t.infer(types) } -> std::same_as<value_type const *>;
-    // TODO: you probably need the inferred type on `emit`
+    // TODO: do you really need the type on `emit`? if not, you can assign it automatically from `make` to avoid errors
     { t.emit(bld, types.get(entt::entity{}).type) } -> std::same_as<entt::entity>;
 };
 

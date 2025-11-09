@@ -29,6 +29,7 @@ inline entt::entity call_static_node::emit(builder &bld, value_type const *ty) c
 {
     auto const call = bld.make(node_op::CallStatic, args);
     // TODO: as optimization, figure out if it's a pure call and cut the link to `mem_state` if so
+    bld.reg.get<node_type>(call).type = ty;
     bld.reg.emplace<effect>(call, mem_state);
 
     return call;
