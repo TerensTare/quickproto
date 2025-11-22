@@ -26,12 +26,15 @@
 #include "nodegen/neg.hpp"
 #include "nodegen/not.hpp"
 
-
-// control flow
+// control flow state
 #include "nodegen/exit.hpp"
 #include "nodegen/region.hpp"
 #include "nodegen/return.hpp"
 #include "nodegen/return_phi.hpp"
+
+// memory state
+#include "nodegen/load.hpp"
+#include "nodegen/store.hpp"
 
 // other
 #include "nodegen/call_static.hpp"

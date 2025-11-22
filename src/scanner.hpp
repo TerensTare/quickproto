@@ -83,6 +83,7 @@ inline static std::unordered_map<std::string_view, token_kind> const keywords{
     {"nil", token_kind::KwNil},
     {"return", token_kind::KwReturn},
     {"true", token_kind::KwTrue},
+    {"type", token_kind::KwType},
     {"var", token_kind::KwVar},
 };
 

@@ -164,6 +164,7 @@ struct binary_op_not_implemented_type final : value_error
 
 inline value_type const *value_type::assign(value_type const *rhs) const noexcept
 {
+    // TODO: is this correct? not entirely
     return rhs->as<bot_type>()
                ? rhs
                : new binary_op_not_implemented_type{"=", this, rhs};

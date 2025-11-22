@@ -67,6 +67,7 @@ enum class node_op : uint8_t
 
     IfYes,  // IfYes In=[ctrlNode, condNode]
     IfNot,  // IfNot In=[ctrlNode, condNode]
+    Loop, // Loop In=[ctrlNode] Out=[IfYes, IfNot]
     Region, // Region - a merge point for multiple control flows
     Phi,    // Phi In=[regionNode, dataNode x len(regionIn)]
 
@@ -136,7 +137,16 @@ struct node_inputs final
 
 // component
 // (id) -> effect{target} means that `id` affects the `target` node
-struct effect final
+// used for nodes that affect control flow
+struct ctrl_effect final
+{
+    entt::entity target;
+};
+
+// component
+// (id) -> effect{target} means that `id` affects the `target` node
+// used for nodes that affect memory, such as stores
+struct mem_effect final
 {
     entt::entity target;
 };

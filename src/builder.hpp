@@ -175,9 +175,10 @@ inline void prune_dead_code(builder &bld, entt::entity ret) noexcept
 
     auto &&new_nodes = bld.reg.storage<void>((entt::id_type)visibility::maybe_reachable);
     auto &&visited = bld.reg.storage<void>((entt::id_type)visibility::reachable);
+    auto &&globals = bld.reg.storage<void>((entt::id_type)visibility::global);
 
     auto const &ins_storage = bld.reg.storage<node_inputs>();
-    auto const &effects = bld.reg.storage<effect>();
+    auto const &effects = bld.reg.storage<ctrl_effect>();
 
     // TODO: cache this storage because why not
     std::vector<entt::entity> to_visit;
@@ -209,7 +210,7 @@ inline void prune_dead_code(builder &bld, entt::entity ret) noexcept
     {
         // auto to_cut_view = entt::basic_view{std::tie(new_nodes), std::tie(visited)};
         // TODO: is this correct?
-        auto to_cut_view = entt::basic_view{std::tie(bld.reg.storage<entt::entity>()), std::tie(visited)};
+        auto to_cut_view = entt::basic_view{std::tie(bld.reg.storage<entt::entity>()), std::tie(visited, globals)};
         bld.reg.destroy(to_cut_view.begin(), to_cut_view.end());
     }
 

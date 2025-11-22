@@ -98,6 +98,8 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
         return named_node("IfYes");
     case node_op::IfNot:
         return named_node("IfNot");
+    case node_op::Loop:
+        return named_node("Loop");
     case node_op::Region:
         return named_node("Region");
     case node_op::Phi:
@@ -107,6 +109,14 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
         return named_node("CallStatic");
 
     default:
+#define console_yellow "\033[33m"
+#define console_reset "\033[0m"
+
+        std::println(console_yellow "(Dot backend) Dev warning: found unhandled node kind {}" console_reset, (int)op);
+
+#undef console_reset
+#undef console_yellow
+
         return named_node("<Unknown>");
     }
 
@@ -127,19 +137,23 @@ inline void dot_backend::compile(FILE *out, entt::registry const &reg)
             std::string str;
             auto iter = std::back_inserter(str);
             print_node(iter, reg, id);
-            std::print(out, "  {};\n", str);
+            std::println(out, "  {};", str);
         }
 
         for (size_t i{}; auto &&in : ins.nodes)
-            std::print(out, "  n{} -> n{} [label=\"in#{}\"];\n",
+            std::println(out, "  n{} -> n{} [label=\"in#{}\"];",
                        id, in, i++);
     }
 
-    for (auto [dep, in] : reg.storage<effect>()->each())
-        std::print(out, "  n{} -> n{} [color=red];\n", dep, in.target);
+    for (auto [dep, in] : reg.storage<ctrl_effect>()->each())
+        std::println(out, "  n{} -> n{} [color=red];", dep, in.target);
+
+        // TODO: do you really need to show memory effect nodes?
+    for (auto [dep, in] : reg.storage<mem_effect>()->each())
+        std::println(out, "  n{} -> n{} [color=blue];", dep, in.target);
 
     for (auto [phi, region] : reg.storage<region_of_phi>()->each())
-        std::print(out, "  n{} -> n{} [style=dotted];\n", phi, region.region);
+        std::println(out, "  n{} -> n{} [style=dotted];", phi, region.region);
 
     std::print(out, "}}");
 }

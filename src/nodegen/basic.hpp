@@ -42,6 +42,7 @@ struct type_error final
 static_assert(nodegen<type_error>);
 
 template <nodegen Gen>
+[[nodiscard]]
 inline entt::entity make(builder &bld, Gen const &gen)
 {
     // TODO: cache the storage here then later drop it for embedded type info

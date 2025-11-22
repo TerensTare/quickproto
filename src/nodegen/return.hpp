@@ -10,7 +10,7 @@
 struct return_node final
 {
     // TODO: try to see if you can instead pass an implicit list here
-    entt::entity mem_state;
+    entt::entity ctrl_state;
     std::span<entt::entity const> values;
 
     inline value_type const *infer(type_storage const &types) const;
@@ -48,13 +48,13 @@ inline entt::entity return_node::emit(builder &bld, value_type const *ty) const
     if (values[0] == entt::null)
     {
         auto const ret = bld.make(node_op::Return);
-        bld.reg.emplace<effect>(ret, mem_state);
+        bld.reg.emplace<ctrl_effect>(ret, ctrl_state);
         (void)bld.reg.get_or_emplace<node_type>(ret, ty); // TODO: is this correct?
         return ret;
     }
 
     auto const ret = bld.make(node_op::Return, values);
-    bld.reg.emplace<effect>(ret, mem_state);
+    bld.reg.emplace<ctrl_effect>(ret, ctrl_state);
     (void)bld.reg.get_or_emplace<node_type>(ret, ty); // TODO: is this correct?
     return ret;
 }

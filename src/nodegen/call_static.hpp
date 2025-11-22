@@ -21,8 +21,14 @@ static_assert(nodegen<call_static_node>);
 
 inline value_type const *call_static_node::infer(type_storage const &types) const
 {
-    // TODO: typecheck that values can be passed to `func`, by using `value::call`
-    return types.get(func).type->as<::func>()->ret;
+    auto const n = args.size();
+    std::vector<value_type const *> argty;
+    argty.reserve(n);
+
+    for (auto arg : args)
+        argty.push_back(types.get(arg).type);
+
+    return types.get(func).type->as<::func>()->call(argty);
 }
 
 inline entt::entity call_static_node::emit(builder &bld, value_type const *ty) const
@@ -30,7 +36,8 @@ inline entt::entity call_static_node::emit(builder &bld, value_type const *ty) c
     auto const call = bld.make(node_op::CallStatic, args);
     // TODO: as optimization, figure out if it's a pure call and cut the link to `mem_state` if so
     bld.reg.get<node_type>(call).type = ty;
-    bld.reg.emplace<effect>(call, mem_state);
+    // TODO: this node still might affect I/O and similar
+    bld.reg.emplace<mem_effect>(call, mem_state);
 
     return call;
 }

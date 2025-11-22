@@ -12,7 +12,8 @@ Here is a list of the passes implemented in the peephole stage so far:
     - arithmetic: `+`, `-`, `*`, `/`
     - bit logic: `&`, `^`, `|`
     - unary: `-const(x)` to `const(-x)`
-    - identity comparisons: `a == a` to `true`, `a != a` to `false`, similar `<`, `<=`, `>`, `>=`
+    - identity comparisons: `a == a` to `true`, `a != a` to `false`, same thing for `<`, `<=`, `>`, `>=`
+    - Loads: two consecutive loads can be computed independently and reordered as needed
 
 ## Building
 
