@@ -272,6 +272,8 @@ inline token_kind scanner_iter::next() noexcept
     case '/':
         return eat('=') ? SlashEqual : Slash;
 
+    case '@':
+        return At;
     case ',':
         return Comma;
 

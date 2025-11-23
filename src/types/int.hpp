@@ -215,6 +215,8 @@ struct int_const final : int_
         return cache.insert({n, std::unique_ptr<int_const>(new int_const{n})}).first->second.get();
     }
 
+    inline bool is_const() const { return true; }
+
     // impl value_type
     inline value_type const *add(value_type const *rhs) const noexcept
     {

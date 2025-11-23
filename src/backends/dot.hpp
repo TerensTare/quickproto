@@ -107,6 +107,8 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
 
     case node_op::CallStatic:
         return named_node("CallStatic");
+    case node_op::ExternCall:
+        return named_node("ExternCall");
 
     default:
 #define console_yellow "\033[33m"
@@ -142,13 +144,13 @@ inline void dot_backend::compile(FILE *out, entt::registry const &reg)
 
         for (size_t i{}; auto &&in : ins.nodes)
             std::println(out, "  n{} -> n{} [label=\"in#{}\"];",
-                       id, in, i++);
+                         id, in, i++);
     }
 
     for (auto [dep, in] : reg.storage<ctrl_effect>()->each())
         std::println(out, "  n{} -> n{} [color=red];", dep, in.target);
 
-        // TODO: do you really need to show memory effect nodes?
+    // TODO: do you really need to show memory effect nodes?
     for (auto [dep, in] : reg.storage<mem_effect>()->each())
         std::println(out, "  n{} -> n{} [color=blue];", dep, in.target);
 

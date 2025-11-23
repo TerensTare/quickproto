@@ -102,7 +102,9 @@ enum class node_op : uint8_t
     CmpGt,
     CmpGe,
 
-    CallStatic, // CallStatic In=[ctrl, state, args..., func_to_call] Out=[ctrl, state, result...]
+    // TODO: consistent naming (either `CallStatic` or `StaticCall`, pick one)
+    CallStatic, // CallStatic In=[mem, args..., func_to_call] Out=[mem, result...]
+    ExternCall, // ExternCall In=[ctrl, mem, args..., func_to_call] Out=[ctrl, mem, result...]
 
     Addr,  // Addr Value=someRegister
     Const, // Const Value=someValue

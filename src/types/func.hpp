@@ -19,8 +19,8 @@ struct bad_args_count final : value_error
 
 struct func final : value_type
 {
-    inline func(value_type const *ret, size_t n_params, std::unique_ptr<value_type const *[]> params) noexcept
-        : ret{ret}, n_params{n_params}, params(std::move(params)) {}
+    inline func(bool is_extern, value_type const *ret, size_t n_params, std::unique_ptr<value_type const *[]> params) noexcept
+        : is_extern{is_extern}, ret{ret}, n_params{n_params}, params(std::move(params)) {}
 
     // TODO: you can avoid the span here if you ensure out of this function that `args` is of the correct size
     inline value_type const *call(std::span<value_type const *> args) const noexcept
@@ -37,6 +37,7 @@ struct func final : value_type
     // TODO: print concrete type instead
     inline char const *name() const noexcept final { return "func"; }
 
+    bool is_extern = false;
     value_type const *ret;
     size_t n_params;
     std::unique_ptr<value_type const *[]> params;

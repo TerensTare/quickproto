@@ -222,7 +222,12 @@ struct parser final
     // 'const' <ident> '=' expr ';' decl
     inline void const_decl() noexcept;
     // 'func' <ident> '(' param_decl,*, ')' type? block ';' decl
-    inline void func_decl() noexcept;
+    inline void inline_func_decl() noexcept;
+    // '@' 'extern' 'func' <ident> '(' param_decl,*, ')' type? ';' decl
+    // ^ external function declaration; they do not have a body
+    // HACK: handle `extern` just like other annotations
+    inline void extern_func_decl() noexcept;
+
     // 'var' <ident> type '=' expr ';' decl
     // if parsed inside a block, this is treated as a statement and is followed by a `stmt` rather than a decl
     template <bool AsStmt>
@@ -233,6 +238,7 @@ struct parser final
     template <bool AsStmt>
     inline auto type_decl() noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>;
     // const_decl | func_decl | var_decl
+    // func_decl ::= extern_func_decl | inline_func_decl
     inline void decl() noexcept;
     // decl
     inline void prog() noexcept;
@@ -383,9 +389,13 @@ inline entt::entity parser::call(entt::entity base) noexcept
 
     // codegen
 
+    auto const is_extern = bld.reg.get<node_type>(base).type->as<func>()->is_extern;
+
     // TODO: is this correct? (consider for example, a call is made inside an `If`)
-    auto const call = make(bld, call_static_node{
+    auto const call = make(bld, call_node{
                                     .mem_state = memory_state,
+                                    .ctrl_state = ctrl_state,
+                                    .is_extern = is_extern,
                                     .func = base,
                                     .args = ins,
                                 });
@@ -394,6 +404,8 @@ inline entt::entity parser::call(entt::entity base) noexcept
 
     // TODO: is this correct? (only if there is a side effect)
     memory_state = call;
+    if (is_extern)
+        ctrl_state = call;
 
     // TODO: inline CPS this
     return call_index_or_self(call); // call_index_or_self(parsed)
@@ -664,11 +676,9 @@ inline entt::entity parser::if_stmt() noexcept
     eat(token_kind::KwIf);    // 'if'
     auto const cond = expr(); // expr
 
-    // TODO: is this mem_state or $ctrl?
     auto const if_yes_node = bld.make(node_op::IfYes, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(if_yes_node, ctrl_state);
 
-    // TODO: is this mem_state or $ctrl?
     auto const if_not_node = bld.make(node_op::IfNot, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(if_not_node, ctrl_state);
 
@@ -697,6 +707,7 @@ inline entt::entity parser::if_stmt() noexcept
                            ? if_stmt()
                            : block([&](scope const *else_env, entt::entity else_ret)
                                    {
+                                       // TODO: this should be common for both case (`else if` or just `else`)
                                        eat(token_kind::Semicolon); // ';'
 
                                        auto const region = make(bld, region_node{then_state, ctrl_state});
@@ -968,7 +979,7 @@ inline void parser::const_decl() noexcept
     decl();
 }
 
-inline void parser::func_decl() noexcept
+inline void parser::inline_func_decl() noexcept
 {
     // TODO: is this correct?
     scope_visibility vis;
@@ -1020,7 +1031,7 @@ inline void parser::func_decl() noexcept
                               ? type()
                               : void_type::self();
 
-    bld.reg.get<node_type>(memory_state).type = new func{ret_type, (size_t)param_i, std::move(param_types_list)};
+    bld.reg.get<node_type>(memory_state).type = new func{false, ret_type, (size_t)param_i, std::move(param_types_list)};
 
     auto name = scan.lexeme(nametok);
     if (env.top->defs.contains(name))
@@ -1061,6 +1072,91 @@ inline void parser::func_decl() noexcept
     ctrl_state = old_ctrl_state;
     memory_state = old_mem_state;
     prune_dead_code(bld, ret);
+
+    // TODO: is this correct?
+    bld.pop_vis();
+
+    decl(); // TODO: maybe call this inside the `block`?
+}
+
+inline void parser::extern_func_decl() noexcept
+{
+    // TODO: simplify this; you just need to add the declaration
+    // ^ do not codegen `Proj` for the parameters, just parse their type
+    // ^ just make a `ExternFunc` node to keep the foreign function information (name + type)
+
+    // TODO: is this correct?
+    scope_visibility vis;
+    bld.push_vis<visibility::maybe_reachable>(vis);
+
+    // some setup codegen before parsing
+    // NOTE: this needs to be here because parameters depend on `mem_state`
+    // TODO: rollback this in case of errors during parsing
+    // TODO: `Start` is a value node; address that
+    // TODO: `Start` should have a `$ctrl` child and `arg`, which are separate; address that
+    auto const old_ctrl_state = ctrl_state;
+    auto const old_mem_state = memory_state;
+    // TODO: are `CtrlState` and `MemState` the same node initially? when inlining they might be different
+    ctrl_state = bld.make(node_op::Start);
+    memory_state = ctrl_state;
+
+    // parsing
+
+    eat(token_kind::At);                      // '@'
+    auto const attr = eat(token_kind::Ident); // <ident>
+    if (scan.lexeme(attr) != "extern")
+        fail(attr, "Parsed unknown annotation");
+
+    eat(token_kind::KwFunc);               // 'func'
+    auto nametok = eat(token_kind::Ident); // ident
+    eat(token_kind::LeftParen);            // '('
+
+    // TODO: environment pointer should be restored to before parameters, not after
+    // ^ also declare the function name before params; the environment should contain it
+    // ^ or rather just mark it as unresolved and resolve it later
+    // TODO: parse the parameters + return in a separate function, return the node id
+
+    // param_decl,*,?
+    int64_t param_i = 0;
+    std::vector<value_type const *> param_types;
+
+    while (scan.peek.kind != token_kind::RightParen)
+    {
+        auto const ty = param_decl(param_i++); // param_decl
+        param_types.push_back(ty);
+
+        if (scan.peek.kind != token_kind::Comma)
+            break;
+        scan.next(); // ,
+    }
+
+    eat(token_kind::RightParen); // ')'
+
+    auto param_types_list = std::make_unique_for_overwrite<value_type const *[]>((size_t)param_i);
+    std::copy_n(param_types.data(), param_i, param_types_list.get());
+
+    // type?
+    auto const ret_type = (scan.peek.kind != token_kind::Semicolon)
+                              ? type()
+                              : void_type::self();
+
+    eat(token_kind::Semicolon); // ';'
+
+    bld.reg.get<node_type>(memory_state).type = new func{true, ret_type, (size_t)param_i, std::move(param_types_list)};
+
+    auto name = scan.lexeme(nametok);
+    if (env.top->defs.contains(name))
+        fail(nametok, "Function already defined");
+
+    // TODO: should the function point to the `Start`, `Return`, or where?
+    // ^ you can actually pre-define the `Return` node here, attach it to the env table, then set the node's inputs accordingly
+    // ^ this way you don't need to specially handle the case where a `return void` function does not have a `return` stmt
+    // TODO: should it be memory or ctrl? probably ctrl since after parsing it points to the `Return`
+    // TODO: ^ maybe all state nodes, rather than just one
+    env.top->defs.insert({name, memory_state});
+
+    ctrl_state = old_ctrl_state;
+    memory_state = old_mem_state;
 
     // TODO: is this correct?
     bld.pop_vis();
@@ -1139,7 +1235,10 @@ inline void parser::decl() noexcept
         return const_decl();
 
     case token_kind::KwFunc:
-        return func_decl();
+        return inline_func_decl();
+
+    case token_kind::At:
+        return extern_func_decl();
 
     case token_kind::KwVar:
         return var_decl<false>();
@@ -1313,7 +1412,7 @@ inline void parser::codegen_main() noexcept
 
     // TODO: should you pass `main_node` to the inputs of the function?
     entt::entity const main_ins[]{entt::null};
-    auto const call_main = make(bld, call_static_node{
+    auto const call_main = make(bld, call_node{
                                          .mem_state = memory_state,
                                          .func = main_node,
                                          .args = std::span(main_ins, 0),

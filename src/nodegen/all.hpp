@@ -37,5 +37,5 @@
 #include "nodegen/store.hpp"
 
 // other
-#include "nodegen/call_static.hpp"
+#include "nodegen/call.hpp"
 #include "nodegen/value.hpp"

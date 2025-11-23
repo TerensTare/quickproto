@@ -33,6 +33,7 @@ enum class token_kind : uint8_t
     Xor,      // ^
     XorEqual, // ^=
 
+    At,        // @
     Comma,     // ,
     Semicolon, // ;
     Colon,     // :
