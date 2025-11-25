@@ -24,8 +24,6 @@
 // ^- you have to copy everything all the time (maybe you can keep constant stuff separately and have a pointer to there?)
 // ^-- to mitigate this, you can have a separate `const_env` for non-mutable stuff and store it as links, everything else is deep copied
 
-struct type;
-
 struct dual_hash final
 {
     using is_transparent = void;

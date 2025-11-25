@@ -9,11 +9,11 @@
 
 struct call_node final
 {
+    using ctrl_node = void;
+    using mem_node = void;
+
     // TODO: figure out the exact inputs you need for this node
-    entt::entity mem_state;
-    entt::entity ctrl_state;
     bool is_extern = false;
-    // TODO: make use of `func`
     entt::entity func;
     std::span<entt::entity const> args;
 
@@ -45,9 +45,6 @@ inline entt::entity call_node::emit(builder &bld, value_type const *ty) const
     // TODO: as optimization, figure out if it's a pure call and cut the link to `mem_state` if so
     bld.reg.get<node_type>(call).type = ty;
     // TODO: this node still might affect I/O and similar
-    bld.reg.emplace<mem_effect>(call, mem_state);
-    if (is_extern)
-        bld.reg.emplace<ctrl_effect>(call, ctrl_state);
 
     return call;
 }

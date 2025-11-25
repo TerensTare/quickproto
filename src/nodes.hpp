@@ -130,7 +130,6 @@ struct users final
 };
 
 // component
-// TODO: inline small-size list depending on node type
 // TODO: nodes have a fixed number of inputs (except maybe call when optimized?) so you can use a `dynamic_array<T>` here probably with a small buffer for math nodes
 struct node_inputs final
 {

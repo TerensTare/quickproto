@@ -36,6 +36,9 @@ inline entt::entity load_node::emit(builder &bld, value_type const *ty) const
     entt::entity const ins[]{base, offset};
     auto const load = bld.make(node_op::Load, ins);
 
+    // TODO: is this correct?
+    bld.reg.get<node_type>(load).type = ty;
+
     // optimization: two consecutive loads are independent from each other
     auto const target = (bld.reg.get<node_op>(mem_state) == node_op::Load)
                             ? bld.reg.get<mem_effect>(mem_state).target

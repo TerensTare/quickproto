@@ -53,5 +53,18 @@ inline entt::entity make(builder &bld, Gen const &gen)
     if (auto err = ty->as<value_error>())
         return make(bld, type_error{err});
 
-    return gen.emit(bld, ty);
+    auto const n = gen.emit(bld, ty);
+    if constexpr (requires { typename Gen::ctrl_node; })
+    {
+        bld.reg.emplace<ctrl_effect>(n, bld.state.ctrl);
+        bld.state.ctrl = n;
+    }
+
+    if constexpr (requires { typename Gen::mem_node; })
+    {
+        bld.reg.emplace<mem_effect>(n, bld.state.mem);
+        bld.state.mem = n;
+    }
+
+    return n;
 }

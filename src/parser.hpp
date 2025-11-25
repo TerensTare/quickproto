@@ -9,6 +9,7 @@
 #include "scanner.hpp"
 
 #include "types/all.hpp"
+#include "utils/function_ref.hpp"
 
 // TODO:
 // - enable multiple declarations and multiple assignments once you fully figure them out
@@ -127,6 +128,8 @@ static constexpr auto prec_table = []()
 
 struct parser final
 {
+    using block_then = function_ref<entt::entity(scope const *, entt::entity)>;
+
     // expr
 
     // call_index_or_self(base) ::= call(base) | index(base) | base
@@ -172,14 +175,19 @@ struct parser final
     // <ident>,+ ':=' expr,+ ';' stmt
     [[nodiscard]]
     inline entt::entity local_decl(token lhs) noexcept;
+    // expr '=' expr ';' stmt
+    // HACK: can you merge this with `compound_assign`?
+    [[nodiscard]]
+    inline entt::entity assign(entt::entity lhs) noexcept;
+
     // expr comp_op expr ';' stmt
     // comp_op ::= '+=' | '-=' | '*=' | '/=' | '&=' | '^=' | '|='
     [[nodiscard]]
-    inline entt::entity compound_assign(token lhs) noexcept;
+    inline entt::entity compound_assign(entt::entity lhs) noexcept;
     // expr post_op ';' stmt
     // post_op ::= '++' | '--'
     [[nodiscard]]
-    inline entt::entity post_op(token lhs) noexcept;
+    inline entt::entity post_op(entt::entity lhs) noexcept;
 
     // 'if' expr block ('else' ( if_stmt | block ))? ';' stmt
     [[nodiscard]]
@@ -199,8 +207,9 @@ struct parser final
     // '{' stmt
     // ^ no `}` as that is handled by the `stmt` recursion
     [[nodiscard]]
-    inline entt::entity block(auto &&then) noexcept;
-    // local_decl | compound_assign | post_op
+    inline entt::entity block(block_then then) noexcept;
+    // local_decl | assign | compound_assign | post_op
+    // TODO: local_decl is disabled for now. Please use `var` syntax instead
     [[nodiscard]]
     inline entt::entity simple_stmt() noexcept;
 
@@ -249,12 +258,10 @@ struct parser final
     scope global = global_scope();
     env env{.top = &global};
 
-    entt::entity memory_state; // TODO: eventually rename back to `mem_state`
-    entt::entity ctrl_state;
-
 private:
     // helpers
-    // <ident> <ident> (name type)
+
+    // <ident> type
     // i is the index of the parameter in the function declaration (used by the Proj node emitted for the parameter)
     inline value_type const *param_decl(int64_t i) noexcept;
 
@@ -281,7 +288,7 @@ private:
 
     // merge `lhs` and `rhs` into a new phi node if either of the nodes is different from `old` and return it, otherwise return `old`
     // TODO: if no `else` branch, `rhs` should be `old`
-    // TODO: move this on the builder API
+    // TODO: move this on the nodegen API
     inline entt::entity phi(entt::entity old, entt::entity lhs, entt::entity rhs) noexcept
     {
         auto const l = lhs != old, r = rhs != old;
@@ -296,8 +303,11 @@ private:
         else
             return old;
 
+        // TODO: specify the type of this node
         auto const ret = bld.make(node_op::Phi, ins);
         (void)bld.reg.emplace<region_of_phi>(ret, old); // TODO: specify the actual region here and run passes
+        // HACK: generalize the type
+        bld.reg.get<node_type>(ret).type = int_bot::self();
         return ret;
     }
 
@@ -393,19 +403,12 @@ inline entt::entity parser::call(entt::entity base) noexcept
 
     // TODO: is this correct? (consider for example, a call is made inside an `If`)
     auto const call = make(bld, call_node{
-                                    .mem_state = memory_state,
-                                    .ctrl_state = ctrl_state,
                                     .is_extern = is_extern,
                                     .func = base,
                                     .args = ins,
                                 });
     // TODO: the call should probably modify just the memory node, not the control flow node
     // TODO: the call should probably link to the `Return` node of the called function, not the `Start`
-
-    // TODO: is this correct? (only if there is a side effect)
-    memory_state = call;
-    if (is_extern)
-        ctrl_state = call;
 
     // TODO: inline CPS this
     return call_index_or_self(call); // call_index_or_self(parsed)
@@ -422,14 +425,10 @@ inline entt::entity parser::index(entt::entity base) noexcept
 
     // codegen
 
-    entt::entity const ins[]{base, i};
-
     // TODO: is this correct? (consider mutability, generalizing `Load`, etc.)
-    // TODO: make this into a nodegen
-    auto const node = make(bld, load_node{.mem_state = memory_state, .base = base, .offset = i});
+    auto const node = make(bld, load_node{.mem_state = bld.state.mem, .base = base, .offset = i});
 
-    // TODO: is this correct? how do you make sure it happens before any possible store, but still optimize it out if only load?
-    memory_state = node;
+    // TODO: how do you make sure it happens before any possible store, but still optimize it out if only load?
 
     // TODO: inline CPS this
     return call_index_or_self(node); // call_index_or_self(parsed)
@@ -588,7 +587,33 @@ inline entt::entity parser::local_decl(token lhs) noexcept
     return stmt();
 }
 
-inline entt::entity parser::compound_assign(token id) noexcept
+inline entt::entity parser::assign(entt::entity lhs) noexcept
+{
+    // TODO:
+    // - the assignment should be evaluated RTL
+
+    // parsing
+    eat(token_kind::Equal); // '='
+
+    // auto const name = scan.lexeme(id);
+    // auto const lhs = env.get_var(name);
+
+    // TODO: handle multi-expression case
+    auto const rhs = expr();    // expr
+    eat(token_kind::Semicolon); // ';'
+
+    // codegen
+
+    // TODO: do you need to codegen a `Load` for lhs?
+
+    // TODO: update the environment
+    auto const store = make(bld, store_node{.lhs = lhs, .rhs = rhs});
+    // env.set_var(name, opnode);
+
+    return stmt();
+}
+
+inline entt::entity parser::compound_assign(entt::entity lhs) noexcept
 {
     // TODO:
     // - the assignment should be evaluated RTL
@@ -607,8 +632,8 @@ inline entt::entity parser::compound_assign(token id) noexcept
 
     auto const optok = eat(ops).kind; // compound_op
 
-    auto const name = scan.lexeme(id);
-    auto const lhs = env.get_var(name);
+    // auto const name = scan.lexeme(id);
+    // auto const lhs = env.get_var(name);
 
     // TODO: handle multi-expression case
     auto const rhs = expr();    // expr
@@ -634,12 +659,13 @@ inline entt::entity parser::compound_assign(token id) noexcept
             : make(bld, bit_or_node{lhs, rhs});
 
     // TODO: update the environment
-    env.set_var(name, opnode);
+    auto const store = make(bld, store_node{.lhs = lhs, .rhs = rhs});
+    // env.set_var(name, opnode);
 
     return stmt();
 }
 
-inline entt::entity parser::post_op(token id) noexcept
+inline entt::entity parser::post_op(entt::entity lhs) noexcept
 {
     // parsing
 
@@ -654,8 +680,8 @@ inline entt::entity parser::post_op(token id) noexcept
 
     // TODO: do you need to codegen a load for lhs?
 
-    auto const name = scan.lexeme(id);
-    auto const lhs = env.get_var(name);
+    // auto const name = scan.lexeme(id);
+    // auto const lhs = env.get_var(name);
     auto const rhs = make(bld, value_node{int_const::value(1)});
 
     auto const opnode = optok == token_kind::PlusPlus
@@ -663,7 +689,8 @@ inline entt::entity parser::post_op(token id) noexcept
                             : make(bld, sub_node{lhs, rhs});
 
     // TODO: update the environment's status
-    env.set_var(name, opnode);
+    auto const store = make(bld, store_node{.lhs = lhs, .rhs = rhs});
+    // env.set_var(name, opnode);
 
     return stmt();
 }
@@ -677,18 +704,18 @@ inline entt::entity parser::if_stmt() noexcept
     auto const cond = expr(); // expr
 
     auto const if_yes_node = bld.make(node_op::IfYes, std::span(&cond, 1));
-    bld.reg.emplace<ctrl_effect>(if_yes_node, ctrl_state);
+    bld.reg.emplace<ctrl_effect>(if_yes_node, bld.state.ctrl);
 
     auto const if_not_node = bld.make(node_op::IfNot, std::span(&cond, 1));
-    bld.reg.emplace<ctrl_effect>(if_not_node, ctrl_state);
+    bld.reg.emplace<ctrl_effect>(if_not_node, bld.state.ctrl);
 
-    ctrl_state = if_yes_node;
+    bld.state.ctrl = if_yes_node;
 
     return block(
         [&](scope const *then_env, entt::entity then_ret)
         {
-            auto const then_state = ctrl_state; // TODO: link this to `region` instead
-            ctrl_state = if_not_node;
+            auto const then_state = bld.state.ctrl; // TODO: link this to `region` instead
+            bld.state.ctrl = if_not_node;
 
             if (scan.peek.kind == token_kind::KwElse)
             {
@@ -710,8 +737,7 @@ inline entt::entity parser::if_stmt() noexcept
                                        // TODO: this should be common for both case (`else if` or just `else`)
                                        eat(token_kind::Semicolon); // ';'
 
-                                       auto const region = make(bld, region_node{then_state, ctrl_state});
-                                       ctrl_state = region; // TODO: is this correct?
+                                       auto const region = make(bld, region_node{then_state, bld.state.ctrl});
 
                                        // TODO: all this is common on both branches
                                        // TODO: is this correct? (from here to return)
@@ -734,8 +760,7 @@ inline entt::entity parser::if_stmt() noexcept
             {
                 eat(token_kind::Semicolon); // ';'
 
-                auto const region = make(bld, region_node{then_state, ctrl_state});
-                ctrl_state = region;                  // TODO: is this correct?
+                auto const region = make(bld, region_node{then_state, bld.state.ctrl});
                 merge(*env.top, *then_env, *env.top); // TODO: is this correct?
 
                 // TODO: implement
@@ -757,21 +782,16 @@ inline entt::entity parser::for_stmt() noexcept
     eat(token_kind::KwFor); // 'for'
     auto cond = expr();     // expr
 
-    auto const loop_node = bld.make(node_op::Loop);
-    bld.reg.emplace<ctrl_effect>(loop_node, ctrl_state);
-    ctrl_state = loop_node;
-
-    auto const old_state = ctrl_state;
+    auto const loop = make(bld, loop_node{});
 
     auto const if_yes_node = bld.make(node_op::IfYes, std::span(&cond, 1));
-    bld.reg.emplace<ctrl_effect>(if_yes_node, ctrl_state);
-
-    ctrl_state = if_yes_node;
+    bld.reg.emplace<ctrl_effect>(if_yes_node, bld.state.ctrl);
+    bld.state.ctrl = if_yes_node;
 
     auto const for_ret = block([&](scope const *loop_env, entt::entity ret)
                                {
                                    // TODO: implement
-                                   auto const region = make(bld, region_node{old_state, ctrl_state});
+                                   auto const region = make(bld, region_node{loop, bld.state.ctrl});
 
                                    // TODO: all this is common on both branches
                                    // TODO: is this correct? (from here to return)
@@ -783,10 +803,10 @@ inline entt::entity parser::for_stmt() noexcept
                                    return ret; //
                                });
 
+    bld.state.ctrl = loop;
     auto const rest_node = bld.make(node_op::IfNot, std::span(&cond, 1));
-    bld.reg.emplace<ctrl_effect>(rest_node, old_state);
-
-    ctrl_state = rest_node;
+    bld.reg.emplace<ctrl_effect>(rest_node, bld.state.ctrl);
+    bld.state.ctrl = rest_node;
 
     auto const rest_ret = stmt(); // stmt
 
@@ -845,7 +865,7 @@ inline entt::entity parser::return_stmt() noexcept
     return (outs.n == 0) ? (entt::entity)entt::null : outs[0];
 }
 
-inline entt::entity parser::block(auto &&then) noexcept
+inline entt::entity parser::block(block_then then) noexcept
 {
     // TODO: figure out merging with parent
     scope block_env{.prev = env.top};
@@ -862,13 +882,18 @@ inline entt::entity parser::simple_stmt() noexcept
 {
     // TODO: parse a `stacklist` and convert to `smallvec`
     // TODO: error out if using a non-identifier as a lhs of a definition
-    auto lhs = eat(token_kind::Ident); // expr
+    auto const lhs = expr(); // expr
 
     switch (scan.peek.kind)
     {
     case token_kind::Walrus:
-        // TODO: actually edit the entry in the environment map
-        return local_decl(lhs);
+        // TODO: enable local declarations back
+        fail(scan.peek, "Local declarations are disabled for now. Please use `var` syntax in the meantime.");
+        return entt::null;
+        // return local_decl(lhs);
+
+    case token_kind::Equal:
+        return assign(lhs);
 
     case token_kind::PlusPlus:
     // TODO: enable this back
@@ -892,7 +917,7 @@ inline entt::entity parser::simple_stmt() noexcept
         return compound_assign(lhs);
 
     default:
-        fail(scan.peek, "Expected one of the following: `:=`, `++`, `--`, `+=`, `-=`, `*=`, `/=`");
+        fail(scan.peek, "Expected one of the following: `:=`, `=`, `++`, `--`, `+=`, `-=`, `*=`, `/=`");
         return entt::null;
     }
 }
@@ -990,11 +1015,8 @@ inline void parser::inline_func_decl() noexcept
     // TODO: rollback this in case of errors during parsing
     // TODO: `Start` is a value node; address that
     // TODO: `Start` should have a `$ctrl` child and `arg`, which are separate; address that
-    auto const old_ctrl_state = ctrl_state;
-    auto const old_mem_state = memory_state;
     // TODO: are `CtrlState` and `MemState` the same node initially? when inlining they might be different
-    ctrl_state = bld.make(node_op::Start);
-    memory_state = ctrl_state;
+    auto const old_state = bld.new_func();
 
     // parsing
 
@@ -1031,7 +1053,7 @@ inline void parser::inline_func_decl() noexcept
                               ? type()
                               : void_type::self();
 
-    bld.reg.get<node_type>(memory_state).type = new func{false, ret_type, (size_t)param_i, std::move(param_types_list)};
+    bld.reg.get<node_type>(bld.state.mem).type = new func{false, ret_type, (size_t)param_i, std::move(param_types_list)};
 
     auto name = scan.lexeme(nametok);
     if (env.top->defs.contains(name))
@@ -1042,7 +1064,7 @@ inline void parser::inline_func_decl() noexcept
     // ^ this way you don't need to specially handle the case where a `return void` function does not have a `return` stmt
     // TODO: should it be memory or ctrl? probably ctrl since after parsing it points to the `Return`
     // TODO: ^ maybe all state nodes, rather than just one
-    env.top->defs.insert({name, memory_state});
+    env.top->defs.insert({name, bld.state.mem});
 
     // TODO: typecheck that the return type matches what's expected
     // TODO: is this actually the `Return` node?
@@ -1052,7 +1074,7 @@ inline void parser::inline_func_decl() noexcept
 
                                // TODO: handle multi-return case
                                entt::entity const params[]{ret};
-                               auto const out = make(bld, return_node{ctrl_state, params});
+                               auto const out = make(bld, return_node{params});
 
                                // TODO: move this to a function
                                // TODO: handle assignment to constants
@@ -1069,8 +1091,7 @@ inline void parser::inline_func_decl() noexcept
                                return out; //
                            });
 
-    ctrl_state = old_ctrl_state;
-    memory_state = old_mem_state;
+    bld.state = old_state;
     prune_dead_code(bld, ret);
 
     // TODO: is this correct?
@@ -1094,11 +1115,8 @@ inline void parser::extern_func_decl() noexcept
     // TODO: rollback this in case of errors during parsing
     // TODO: `Start` is a value node; address that
     // TODO: `Start` should have a `$ctrl` child and `arg`, which are separate; address that
-    auto const old_ctrl_state = ctrl_state;
-    auto const old_mem_state = memory_state;
     // TODO: are `CtrlState` and `MemState` the same node initially? when inlining they might be different
-    ctrl_state = bld.make(node_op::Start);
-    memory_state = ctrl_state;
+    auto const old_state = bld.new_func();
 
     // parsing
 
@@ -1142,7 +1160,7 @@ inline void parser::extern_func_decl() noexcept
 
     eat(token_kind::Semicolon); // ';'
 
-    bld.reg.get<node_type>(memory_state).type = new func{true, ret_type, (size_t)param_i, std::move(param_types_list)};
+    bld.reg.get<node_type>(bld.state.mem).type = new func{true, ret_type, (size_t)param_i, std::move(param_types_list)};
 
     auto name = scan.lexeme(nametok);
     if (env.top->defs.contains(name))
@@ -1153,10 +1171,9 @@ inline void parser::extern_func_decl() noexcept
     // ^ this way you don't need to specially handle the case where a `return void` function does not have a `return` stmt
     // TODO: should it be memory or ctrl? probably ctrl since after parsing it points to the `Return`
     // TODO: ^ maybe all state nodes, rather than just one
-    env.top->defs.insert({name, memory_state});
+    env.top->defs.insert({name, bld.state.mem});
 
-    ctrl_state = old_ctrl_state;
-    memory_state = old_mem_state;
+    bld.state = old_state;
 
     // TODO: is this correct?
     bld.pop_vis();
@@ -1178,12 +1195,7 @@ inline auto parser::var_decl() noexcept -> std::conditional_t<AsStmt, decltype(s
 
     // codegen
 
-    // TODO: codegen a `Store` only on global declarations
-    // TODO: link a `Proj` node from the global `State` as input
-    auto const store = make(bld, store_node{memory_state, ty, init});
-    memory_state = store;
-
-    env.new_var(scan.lexeme(name), store);
+    env.new_var(scan.lexeme(name), init);
 
     if constexpr (AsStmt)
         return stmt();
@@ -1192,7 +1204,7 @@ inline auto parser::var_decl() noexcept -> std::conditional_t<AsStmt, decltype(s
         // TODO: `prune_dead_code` is common for every declaration, find a way to address this
         // ^ merge `prune_dead_code` and `decl` so you don't jump around; make sure it's a tail call
         // - probably it's best to tail-call `decl` from `prune_dead_code`
-        prune_dead_code(bld, store);
+        prune_dead_code(bld, init);
 
         decl();
     }
@@ -1260,8 +1272,7 @@ inline void parser::prog() noexcept
     scope_visibility vis;
     bld.push_vis<visibility::global>(vis);
 
-    ctrl_state = bld.make(node_op::Start);
-    memory_state = ctrl_state;
+    (void)bld.new_func();
 
     decl(); // decl*
 }
@@ -1278,7 +1289,7 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
     // codegen
 
     // TODO: recheck this
-    auto const node = bld.make(node_op::Proj, std::span(&memory_state, 1));
+    auto const node = bld.make(node_op::Proj, std::span(&bld.state.mem, 1));
     // TODO: figure out the exact type of this
     // TODO: is this correct now?
     bld.reg.get<node_type>(node).type = ty;
@@ -1292,7 +1303,8 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
 
 inline smallvec parser::expr_list_term(token_kind term) noexcept
 {
-    auto parse_arguments = [&](auto &&self, stacklist<entt::entity> *ins, int list_size = 0) -> smallvec
+    auto parse_arguments = [&](auto &&self, stacklist<entt::entity> *ins, int list_size = 0)
+        -> smallvec
     {
         // TODO: is the control flow correct here?
         if (scan.peek.kind != term)
@@ -1321,7 +1333,8 @@ inline smallvec parser::expr_list() noexcept
     auto const first = expr(); // expr
     stacklist head{.value = first};
 
-    auto parse_arguments = [&](auto &&self, stacklist<entt::entity> *ins, int list_size = 0) -> smallvec
+    auto parse_arguments = [&](auto &&self, stacklist<entt::entity> *ins, int list_size = 0)
+        -> smallvec
     {
         // TODO: is the control flow correct here?
         if (scan.peek.kind == token_kind::Comma)
@@ -1413,16 +1426,14 @@ inline void parser::codegen_main() noexcept
     // TODO: should you pass `main_node` to the inputs of the function?
     entt::entity const main_ins[]{entt::null};
     auto const call_main = make(bld, call_node{
-                                         .mem_state = memory_state,
+                                         .is_extern = false,
                                          .func = main_node,
                                          .args = std::span(main_ins, 0),
                                      });
     ensure(bld.reg.get<node_type>(call_main).type->as<void_type>(), "Function `main` cannot return a value!");
-    memory_state = call_main;
 
     // TODO: is this correct?
     auto const exit = make(bld, exit_node{
-                                    .ctrl_state = ctrl_state,
                                     .code = 0,
                                 });
     // TODO: DCE on unused functions

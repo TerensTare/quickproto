@@ -33,6 +33,7 @@ inline entt::entity region_node::emit(builder &bld, value_type const *ty) const
     // ^ (maybe) this can be done by a pass instead?
     entt::entity const ins[]{then_state, else_state};
     auto const ret = bld.make(node_op::Region, ins);
+    bld.state.ctrl = ret;
     return ret;
     // TODO:
     // - fold the `Region` if possible

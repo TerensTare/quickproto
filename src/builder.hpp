@@ -123,6 +123,26 @@ struct builder final
     entt::registry reg;
     scope_visibility global;
     scope_visibility *scopes = &global;
+
+    struct func_state
+    {
+        entt::entity ctrl;
+        entt::entity mem;
+    };
+
+    // Push a new function state, return the old one so you can reset it
+    [[nodiscard]]
+    inline func_state new_func() noexcept
+    {
+        auto const old = state;
+
+        auto const ns = make(node_op::Start);
+        state.ctrl = ns;
+        state.mem = ns;
+        return old;
+    }
+
+    func_state state;
 };
 
 inline entt::entity builder::make(node_op op, std::span<entt::entity const> nins) noexcept
