@@ -13,7 +13,7 @@ struct call_node final
     using mem_node = void;
 
     // TODO: figure out the exact inputs you need for this node
-    bool is_extern = false;
+    bool is_extern = false; // TODO: this is present on the `func` type, figure it out from there
     entt::entity func;
     std::span<entt::entity const> args;
 

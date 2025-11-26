@@ -10,6 +10,7 @@
 struct return_node final
 {
     using ctrl_node = void;
+    using mem_node = void; // TODO: is this correct?
 
     // TODO: try to see if you can instead pass an implicit list here
     std::span<entt::entity const> values;

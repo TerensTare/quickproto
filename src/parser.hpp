@@ -12,6 +12,7 @@
 #include "utils/function_ref.hpp"
 
 // TODO:
+// - generate `Store`s when creating an array
 // - enable multiple declarations and multiple assignments once you fully figure them out
 // - types and instances model; "operations" on types are type decorators, on instances are normal operators
 // - `then` should probably accept a `stacklist` for return instead; this solves the multi-return problem + marking return as `entt::null`
@@ -38,7 +39,6 @@
 // - when encountering a return, you should probably set the memory state to the `return` node
 // - the returned values (on multi-return case) outlive the `then` call inside `block`, so you can just pass them as a span
 // ^ also have local storage for return params that is reused, just so you don't reallocate every function call
-// - make `then` be a `function_ref`
 // - inline all the CPS calls
 // - apparently you don't need `Store` nodes most of the time; you only need them for nodes where it has an effect on
 // ^ (which is most of the time just class/global variables; for pointer function params you can just change the variable value from the calling function)

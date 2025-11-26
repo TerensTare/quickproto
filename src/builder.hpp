@@ -198,7 +198,8 @@ inline void prune_dead_code(builder &bld, entt::entity ret) noexcept
     auto &&globals = bld.reg.storage<void>((entt::id_type)visibility::global);
 
     auto const &ins_storage = bld.reg.storage<node_inputs>();
-    auto const &effects = bld.reg.storage<ctrl_effect>();
+    auto const &ctrl = bld.reg.storage<ctrl_effect>();
+    auto const &mem = bld.reg.storage<mem_effect>();
 
     // TODO: cache this storage because why not
     std::vector<entt::entity> to_visit;
@@ -220,8 +221,12 @@ inline void prune_dead_code(builder &bld, entt::entity ret) noexcept
         auto &&ins = ins_storage.get(top).nodes;
         to_visit.insert(to_visit.end(), ins.begin(), ins.end());
 
-        if (effects.contains(top))
-            to_visit.push_back(effects.get(top).target);
+        if (ctrl.contains(top))
+            to_visit.push_back(ctrl.get(top).target);
+
+        // TODO: is this correct?
+        if (mem.contains(top))
+            to_visit.push_back(mem.get(top).target);
 
         visited.emplace(top);
     }
