@@ -35,6 +35,7 @@ enum class token_kind : uint8_t
 
     At,        // @
     Comma,     // ,
+    Dot,       // .
     Semicolon, // ;
     Colon,     // :
     Walrus,    // :=
@@ -59,6 +60,7 @@ enum class token_kind : uint8_t
     KwIf,
     KwNil,
     KwReturn,
+    KwStruct,
     KwTrue,
     KwType,
     KwVar,

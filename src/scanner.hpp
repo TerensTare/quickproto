@@ -82,6 +82,7 @@ inline static std::unordered_map<std::string_view, token_kind> const keywords{
     {"if", token_kind::KwIf},
     {"nil", token_kind::KwNil},
     {"return", token_kind::KwReturn},
+    {"struct", token_kind::KwStruct},
     {"true", token_kind::KwTrue},
     {"type", token_kind::KwType},
     {"var", token_kind::KwVar},
@@ -276,6 +277,8 @@ inline token_kind scanner_iter::next() noexcept
         return At;
     case ',':
         return Comma;
+    case '.':
+        return Dot;
 
     case '\n': // this is only hit on automatic semicolon insertion
     case ';':

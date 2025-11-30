@@ -86,7 +86,7 @@ struct value_type
 
     // lhs(args...)
     virtual value_type const *call(std::span<value_type const *> args) const noexcept;
-    // lhs[rhs]
+    // lhs[rhs] or lhs.rhs depending on sub-type
     virtual value_type const *index(value_type const *i) const noexcept;
 
     // TODO: how do you implement this on `struct`, `func`, `tuple`, etc.?
@@ -160,6 +160,18 @@ struct binary_op_not_implemented_type final : value_error
     char const *op;
     value_type const *lhs;
     value_type const *rhs;
+};
+
+// signals that the given type does not have a member with the given name
+struct no_member_error final : value_error
+{
+    inline no_member_error(value_type const *base, std::string_view member)
+        : base{base}, member{member} {}
+
+    inline char const *name() const noexcept { return "<no-member-with-this-name>"; }
+
+    value_type const *base;
+    std::string_view member;
 };
 
 inline value_type const *value_type::assign(value_type const *rhs) const noexcept

@@ -5,7 +5,9 @@
 #include "backends/backend.hpp"
 #include "types/all.hpp"
 
-// TODO: on hover, show the type of the node
+// TODO:
+// - on hover, show the type of the node
+// - show `Load`/`Store` nodes as `.x`/`.x = `
 
 struct dot_backend final : backend
 {
@@ -26,6 +28,8 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
         return named_node("Load");
     case node_op::Store:
         return named_node("Store");
+    case node_op::Alloca:
+        return named_node("Alloca"); // TODO: show the type of the node instead
     case node_op::Start:
         return named_node("State");
     case node_op::Return:

@@ -34,6 +34,7 @@
 #include "nodegen/return_phi.hpp"
 
 // memory state
+#include "nodegen/alloca.hpp"
 #include "nodegen/load.hpp"
 #include "nodegen/store.hpp"
 

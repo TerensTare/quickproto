@@ -57,17 +57,18 @@ struct value_type;
 // component
 enum class node_op : uint8_t
 {
-    Load,      // Load In=[Addr(someVar), start | lastStoreBeforeThis, Offset=size_t(default=0)]
-    Store,     // Store In=[Addr(dstRegister), srcNode, start | lastStoreBeforeThis]
+    Load,      // Load In=[somePlace, indexNode; memState]
+    Store,     // Store In=[dstPlace, indexNode, srcPlace; memState]
     MultiNode, // MultiNode Value=[n] In=array[node *; n]
     Proj,      // Proj Value=[i] In=[multiNode]
     Start,     // Start - a no-op node for preserving ordering between loads/stores and for representing side effects. Also indicates the beginning of a function
+    Alloca,    // Alloca - create a known-sized object of node's type in the stack
     Return,    // Return Value=[n] In=[ctrl, returnNode x n]
     Exit,      // Exit Value=[n]
 
     IfYes,  // IfYes In=[ctrlNode, condNode]
     IfNot,  // IfNot In=[ctrlNode, condNode]
-    Loop, // Loop In=[ctrlNode] Out=[IfYes, IfNot]
+    Loop,   // Loop In=[ctrlNode] Out=[IfYes, IfNot]
     Region, // Region - a merge point for multiple control flows
     Phi,    // Phi In=[regionNode, dataNode x len(regionIn)]
 

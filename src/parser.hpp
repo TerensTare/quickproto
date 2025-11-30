@@ -132,30 +132,35 @@ struct parser final
 
     // expr
 
-    // call_index_or_self(base) ::= call(base) | index(base) | base
+    // post_expr(base) ::= call(base) | index(base) | member(base) | base
     // ^ie. it's `base` + any possible call following it
     [[nodiscard]]
-    inline entt::entity call_index_or_self(entt::entity base) noexcept;
+    inline entt::entity post_expr(entt::entity base) noexcept;
 
-    // call(base) ::= call_index_or_self( base '(' expr,*,? ')' )
-    // ^ meaning this rule will parse a call, then invoke `call_index_or_self` with the parsed call as `base`
+    // call(base) ::= post_expr( base '(' expr,*,? ')' )
+    // ^ meaning this rule will parse a call, then invoke `post_expr` with the parsed call as `base`
     [[nodiscard]]
     inline entt::entity call(entt::entity base) noexcept;
 
-    // index(base) ::= call_index_or_self( base '[' expr ']' )
-    // ^ meaning this rule will parse an index, then invoke `call_index_or_self` with the parsed index as `base`
-    // ^ see `parse_prec` for the precedence of each operator
+    // index(base) ::= post_expr( base '[' expr ']' )
+    // ^ meaning this rule will parse an index, then invoke `post_expr` with the parsed index as `base`
     [[nodiscard]]
     inline entt::entity index(entt::entity base) noexcept;
+
+    // TODO: add support for methods
+    // member(base) ::= post_expr( base '.' <ident> )
+    // ^ meaning this rule will parse an index, then invoke `post_expr` with the parsed index as `base`
+    [[nodiscard]]
+    inline entt::entity member(entt::entity base) noexcept;
 
     // primary ::= 'true'
     //           | 'false'
     //           | <integer>
     //           | <decimal>
     //           | <unary_op> expr
-    //           | call_index_or_self( '(' expr ')' )
-    //           | call_index_or_self( array_literal )
-    //           | call_index_or_self(<ident>)
+    //           | post_expr( '(' expr ')' )
+    //           | post_expr( array_literal )
+    //           | post_expr(<ident>)
     // <unary_op> ::= '!' | '-'
     // array_literal ::= '[' ']' type '{' expr,*,? '}'
     [[nodiscard]]
@@ -241,11 +246,21 @@ struct parser final
     // if parsed inside a block, this is treated as a statement and is followed by a `stmt` rather than a decl
     template <bool AsStmt>
     inline auto var_decl() noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>;
-    // 'type' <ident> type ';' decl
+    // alias_decl
     // ^ ie. right now this rule only parses alias declarations
     // if parsed inside a block, this is treated as a statement and is followed by a `stmt` rather than a decl
     template <bool AsStmt>
     inline auto type_decl() noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>;
+    // 'type' <ident> type ';' decl
+    // if parsed inside a block, this is treated as a statement and is followed by a `stmt` rather than a decl
+    template <bool AsStmt>
+    inline auto alias_decl(token nametok) noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>;
+    // 'type' <ident> 'struct' '{' (member_decl ';')* '}'
+    // member_decl ::= <ident> type
+    // TODO: is `member_decl` and `param_decl` the same rule?
+    template <bool AsStmt>
+    inline auto struct_decl(token nametok) noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>;
+
     // const_decl | func_decl | var_decl
     // func_decl ::= extern_func_decl | inline_func_decl
     inline void decl() noexcept;
@@ -283,6 +298,8 @@ private:
 
     // <ident>
     inline value_type const *named_type() noexcept;
+
+    // other helpers
 
     inline void merge(scope &parent, scope const &lhs, scope const &rhs) noexcept;
 
@@ -345,7 +362,7 @@ private:
         auto const ecode = std::string_view{scan.text + t.start, t.len};
         auto const rcode = std::string_view{scan.text + t.start + t.len, end - (t.start + t.len)};
 
-        auto ok_part = std::format("{} |{}", line_num, lcode);
+        auto ok_part = std::format("{} | {}", line_num, lcode);
 
 #define console_red "\033[31m"
 #define console_reset "\033[0m"
@@ -374,7 +391,7 @@ private:
     inline static scope global_scope() noexcept;
 };
 
-inline entt::entity parser::call_index_or_self(entt::entity base) noexcept
+inline entt::entity parser::post_expr(entt::entity base) noexcept
 {
     switch (scan.peek.kind)
     {
@@ -383,6 +400,9 @@ inline entt::entity parser::call_index_or_self(entt::entity base) noexcept
 
     case token_kind::LeftBracket:
         return index(base);
+
+    case token_kind::Dot:
+        return member(base);
 
     default:
         return base;
@@ -411,7 +431,7 @@ inline entt::entity parser::call(entt::entity base) noexcept
     // TODO: the call should probably link to the `Return` node of the called function, not the `Start`
 
     // TODO: inline CPS this
-    return call_index_or_self(call); // call_index_or_self(parsed)
+    return post_expr(call); // post_expr(parsed)
 }
 
 inline entt::entity parser::index(entt::entity base) noexcept
@@ -426,17 +446,60 @@ inline entt::entity parser::index(entt::entity base) noexcept
     // codegen
 
     // TODO: is this correct? (consider mutability, generalizing `Load`, etc.)
-    auto const node = make(bld, load_node{.mem_state = bld.state.mem, .base = base, .offset = i});
+    auto const node = make(bld, load_node{.base = base, .offset = i});
 
     // TODO: how do you make sure it happens before any possible store, but still optimize it out if only load?
 
     // TODO: inline CPS this
-    return call_index_or_self(node); // call_index_or_self(parsed)
+    return post_expr(node); // post_expr(parsed)
+}
+
+inline entt::entity parser::member(entt::entity base) noexcept
+{
+    // parsing
+
+    auto const dot = scan.next(); // '.'
+    // TODO: add `base` to the parameters list or maybe as a special node
+    auto const mem = eat(token_kind::Ident); // <ident>
+
+    // codegen
+
+    // HACK: handle this better
+    auto ty = bld.reg.get<node_type>(base).type->as<struct_type>();
+    if (!ty)
+        fail(dot, "Cannot access member of type!");
+
+    auto const mem_name = scan.lexeme(mem);
+    int32_t offset = -1;
+    for (size_t i{}; i < ty->n_members; ++i)
+    {
+        if (ty->members[i].name == mem_name)
+        {
+            offset = i;
+            break;
+        }
+    }
+
+    // TODO: find a better way to represent `Load`s at known indices
+    // TODO: `int_const` is int64 but `offset` is int32
+    auto const offset_node = make(bld, value_node{int_const::value(offset)});
+
+    // TODO: is this correct? (consider mutability, generalizing `Load`, etc.)
+    // TODO: calculate the offset of the member and pass it to the load nodes
+    auto const node = make(bld, load_node{
+                                    .base = base,
+                                    .offset = offset_node,
+                                });
+
+    // TODO: how do you make sure it happens before any possible store, but still optimize it out if only load?
+
+    // TODO: inline CPS this
+    return post_expr(node); // post_expr(parsed)
 }
 
 inline entt::entity parser::primary() noexcept
 {
-    // TODO: CPS the `expr` calls here, repeat for `call`, `index` and `call_index_or_self`, etc.
+    // TODO: CPS the `expr` calls here, repeat for `call`, `index` and `post_expr`, etc.
     using enum token_kind;
 
     // parsing
@@ -490,7 +553,7 @@ inline entt::entity parser::primary() noexcept
     case KwNil:
         return make(bld, value_node{int_const::value(0)});
 
-        // call_index_or_self(<ident>)
+        // post_expr(<ident>)
     case Ident:
     {
         auto const name = scan.lexeme(tok);
@@ -498,21 +561,21 @@ inline entt::entity parser::primary() noexcept
         // TODO: figure out the type of the node
         // auto const addr = bld.makeval(mem_state, op::Addr, int_bot::self(), {.i64 = 0});
 
-        // TODO: in case of calls, this should get the function node
+        // TODO: in case of calls, this should get the function node, and in case of `{}` it should get the type node
         auto const val = env.get_var(name);
-        return call_index_or_self(val);
+        return post_expr(val);
     }
 
-    // call_or_index_or_self( '(' expr ')' )
+    // post_expr( '(' expr ')' )
     case LeftParen:
     {
         auto const ret = expr(); // expr
         eat(RightParen);         // ')'
         // TODO: is this ok or should you wrap it?
-        return call_index_or_self(ret);
+        return post_expr(ret);
     }
 
-    // call_or_index_or_self( '['']' type '{' expr,*,? '}' )
+    // post_expr( '['']' type '{' expr,*,? '}' )
     case LeftBracket:
     {
         eat(token_kind::RightBracket);                      // ']'
@@ -524,9 +587,9 @@ inline entt::entity parser::primary() noexcept
         // TODO: you also now need a `meet` operation to give the common lowest type between two given types
         // TODO: hack, make the correct node
         // TODO: typecheck that sizes match on `var_decl`
-        auto arrty = new ::array_type{bld.reg.get<node_type const>(init[0]).type, init.n};
+        auto arrty = new ::array_type{subty, init.n};
         auto const ret = make(bld, value_node{arrty});
-        return call_index_or_self(ret);
+        return post_expr(ret);
     }
 
     // '!' expr
@@ -604,10 +667,17 @@ inline entt::entity parser::assign(entt::entity lhs) noexcept
 
     // codegen
 
+    // TODO: is this correct? it ensures that rhs is evaluated before lhs
+    // bld.reg.get<mem_effect>(lhs).target = rhs;
+    // bld.state.mem = lhs;
+
     // TODO: do you need to codegen a `Load` for lhs?
 
     // TODO: update the environment
-    auto const store = make(bld, store_node{.lhs = lhs, .rhs = rhs});
+    auto const store = make(bld, store_node{
+                                     .lhs = lhs,
+                                     .rhs = rhs,
+                                 });
     // env.set_var(name, opnode);
 
     return stmt();
@@ -641,6 +711,10 @@ inline entt::entity parser::compound_assign(entt::entity lhs) noexcept
 
     // codegen
 
+    // TODO: is this correct? it ensures that rhs is evaluated before lhs
+    bld.reg.get<mem_effect>(lhs).target = rhs;
+    bld.state.mem = lhs;
+
     // TODO: do you need to codegen a `Load` for lhs?
 
     auto const opnode =
@@ -659,7 +733,10 @@ inline entt::entity parser::compound_assign(entt::entity lhs) noexcept
             : make(bld, bit_or_node{lhs, rhs});
 
     // TODO: update the environment
-    auto const store = make(bld, store_node{.lhs = lhs, .rhs = rhs});
+    auto const store = make(bld, store_node{
+                                     .lhs = lhs,
+                                     .rhs = opnode,
+                                 });
     // env.set_var(name, opnode);
 
     return stmt();
@@ -678,6 +755,8 @@ inline entt::entity parser::post_op(entt::entity lhs) noexcept
 
     eat(token_kind::Semicolon); // ;
 
+    // codegen
+
     // TODO: do you need to codegen a load for lhs?
 
     // auto const name = scan.lexeme(id);
@@ -689,7 +768,10 @@ inline entt::entity parser::post_op(entt::entity lhs) noexcept
                             : make(bld, sub_node{lhs, rhs});
 
     // TODO: update the environment's status
-    auto const store = make(bld, store_node{.lhs = lhs, .rhs = rhs});
+    auto const store = make(bld, store_node{
+                                     .lhs = lhs,
+                                     .rhs = opnode,
+                                 });
     // env.set_var(name, opnode);
 
     return stmt();
@@ -1217,8 +1299,22 @@ inline auto parser::type_decl() noexcept -> std::conditional_t<AsStmt, decltype(
 
     eat(token_kind::KwType);               // 'type'
     auto nametok = eat(token_kind::Ident); // <ident>
-    auto ty = type();                      // type
-    eat(token_kind::Semicolon);            // ';'
+
+    switch (scan.peek.kind)
+    {
+    case token_kind::KwStruct:
+        return struct_decl<AsStmt>(nametok);
+
+    default:
+        return alias_decl<AsStmt>(nametok);
+    }
+}
+
+template <bool AsStmt>
+inline auto parser::alias_decl(token nametok) noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>
+{
+    auto ty = type();           // type
+    eat(token_kind::Semicolon); // ';'
 
     // codegen
 
@@ -1229,6 +1325,61 @@ inline auto parser::type_decl() noexcept -> std::conditional_t<AsStmt, decltype(
     if (env.top->types.contains(name))
         fail(nametok, "Type is already defined!");
 
+    env.top->types.insert({name, ty});
+
+    // NOTE: no need to prune dead code here, everything is done at compile time
+
+    if constexpr (AsStmt)
+        return stmt();
+    else
+        decl();
+}
+
+template <bool AsStmt>
+inline auto parser::struct_decl(token nametok) noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>
+{
+    auto parse_members = [&](auto &&self, stacklist<member_info> *members, size_t n) -> value_type const *
+    {
+        switch (scan.peek.kind)
+        {
+        case token_kind::RightBrace:
+        {
+            scan.next(); // '}'
+
+            auto mem_ptr = new member_info[n];
+            auto iter = members;
+            for (size_t i{}; i < n; ++i)
+            {
+                mem_ptr[n - i - 1] = iter->value;
+                iter = iter->prev;
+            }
+
+            return new struct_type{n, std::unique_ptr<member_info[]>(mem_ptr)};
+        }
+
+        case token_kind::Ident:
+        {
+            auto const mem_name = scan.next(); // <ident>
+            auto const mem_ty = type();        // type
+            eat(token_kind::Semicolon);        // ';'
+
+            auto mem_node = stacklist{.value = member_info{.name = scan.lexeme(mem_name), .type = mem_ty}, .prev = members};
+            return self(self, &mem_node, n + 1);
+        }
+
+        default:
+            fail(scan.peek, "Expected '}' or <identifier>");
+            return nullptr;
+        }
+    };
+
+    // parsing
+    eat(token_kind::KwStruct);                          // 'struct'
+    eat(token_kind::LeftBrace);                         // '{'
+    auto ty = parse_members(parse_members, nullptr, 0); // (member_decl ';')* '}'
+    eat(token_kind::Semicolon);                         // ';'
+
+    auto name = scan.lexeme(nametok);
     env.top->types.insert({name, ty});
 
     // NOTE: no need to prune dead code here, everything is done at compile time

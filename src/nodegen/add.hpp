@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "nodegen/value.hpp"
+#include "nodegen/mul.hpp"
 
 struct add_node final
 {
@@ -23,6 +23,14 @@ inline entt::entity add_node::emit(builder &bld, value_type const *ty) const
 {
     if (ty->is_const())
         return make(bld, value_node{ty});
+
+    // a + a == a * 2
+    // TODO: only do this for integers/floats, not strings
+    if (lhs == rhs)
+    {
+        auto const two = make(bld, value_node{int_const::value(2)});
+        return make(bld, mul_node{lhs, two});
+    }
 
     entt::entity const ins[]{lhs, rhs};
     return bld.make(node_op::Add, ins);
