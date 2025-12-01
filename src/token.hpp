@@ -53,6 +53,7 @@ enum class token_kind : uint8_t
     KwBreak,
     KwConst,
     KwContinue,
+    KwDefer,
     KwElse,
     KwFalse,
     KwFor,

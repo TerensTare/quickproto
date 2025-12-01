@@ -24,5 +24,7 @@ inline entt::entity div_node::emit(builder &bld, value_type const *ty) const
         return make(bld, value_node{ty});
 
     entt::entity const ins[]{lhs, rhs};
-    return bld.make(node_op::Div, ins);
+    // TODO: more cases here
+    auto const op = ty->as<int_>() ? node_op::Div : node_op::Fdiv;
+    return bld.make(op, ins);
 }

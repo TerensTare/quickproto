@@ -25,5 +25,7 @@ inline entt::entity sub_node::emit(builder &bld, value_type const *ty) const
         return make(bld, value_node{ty});
 
     entt::entity const ins[]{lhs, rhs};
-    return bld.make(node_op::Sub, ins);
+    // TODO: more cases here
+    auto const op = ty->as<int_>() ? node_op::Sub : node_op::Fsub;
+    return bld.make(op, ins);
 }

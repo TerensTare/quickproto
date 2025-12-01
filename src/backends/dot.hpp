@@ -19,7 +19,7 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
     std::format_to(out, "n{} ", id);
 
 #define named_node(label) std::format_to(out, "[label=\"" label "\"]")
-#define circle_node(label) std::format_to(out, "[label=\"" label "\", shape=circle]")
+#define circle_node(label, ...) std::format_to(out, "[label=\"" label "\", shape=circle" __VA_ARGS__ "]")
 
     auto &&[op, type] = reg.get<node_op const, node_type const>(id);
     switch (op)
@@ -53,6 +53,7 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
         else if (auto &&arr = type.type->as<array_type>())
         {
             // TODO: intern arrays to static memory on `value_type`
+            // TODO: show the size here if available
             if (arr->base->as<::int_>())
                 return std::format_to(out, "[label=\"[]int\"]");
             else if (arr->base->as<::bool_>())
@@ -68,13 +69,13 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
     case node_op::UnaryNot:
         return circle_node("!");
     case node_op::Add:
-        return circle_node("+");
+        return circle_node("+", ", tooltip=int32");
     case node_op::Sub:
-        return circle_node("-");
+        return circle_node("-", ", tooltip=int32");
     case node_op::Mul:
-        return circle_node("*");
+        return circle_node("*", ", tooltip=int32");
     case node_op::Div:
-        return circle_node("/");
+        return circle_node("/", ", tooltip=int32");
     case node_op::CmpEq:
         return circle_node("==");
     case node_op::CmpNe:
@@ -97,6 +98,15 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
         return circle_node("^");
     case node_op::BitOr:
         return circle_node("|");
+
+    case node_op::Fadd:
+        return circle_node("+", ", tooltip=float64");
+    case node_op::Fsub:
+        return circle_node("-", ", tooltip=float64");
+    case node_op::Fmul:
+        return circle_node("*", ", tooltip=float64");
+    case node_op::Fdiv:
+        return circle_node("/", ", tooltip=float64");
 
     case node_op::IfYes:
         return named_node("IfYes");

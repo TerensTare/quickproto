@@ -194,6 +194,10 @@ struct parser final
     [[nodiscard]]
     inline entt::entity post_op(entt::entity lhs) noexcept;
 
+    // 'defer' call ';' stmt
+    [[nodiscard]]
+    inline entt::entity defer_stmt() noexcept;
+
     // 'if' expr block ('else' ( if_stmt | block ))? ';' stmt
     [[nodiscard]]
     inline entt::entity if_stmt() noexcept;
@@ -219,10 +223,12 @@ struct parser final
     inline entt::entity simple_stmt() noexcept;
 
     // stmt ::= '}'
+    //        | alias_decl
+    //        | var_decl
     //        | block stmt
+    //        | defer_stmt
     //        | if_stmt
     //        | for_stmt
-    //        | var_decl
     //        | return_stmt
     //        | break_stmt
     //        | continue_stmt
@@ -272,6 +278,8 @@ struct parser final
 
     scope global = global_scope();
     env env{.top = &global};
+
+    stacklist<entt::entity> *defer_stack = nullptr;
 
 private:
     // helpers
@@ -777,6 +785,36 @@ inline entt::entity parser::post_op(entt::entity lhs) noexcept
     return stmt();
 }
 
+inline entt::entity parser::defer_stmt() noexcept
+{
+    // the function's state should not be affected by the `defer` when it's declared, but rather when it's called
+    auto const old_state = bld.state;
+
+    // parsing
+    auto defer = eat(token_kind::KwDefer); // 'defer'
+    auto call = expr();                    // call
+    eat(token_kind::Semicolon);            // ';'
+
+    bld.state = old_state;
+
+    // TODO: add other call conventions eventually
+    switch (bld.reg.get<node_op const>(call))
+    {
+    case node_op::CallStatic:
+    case node_op::ExternCall:
+        break;
+
+    default:
+        fail(defer, "Expected call expression after `defer`.");
+        break;
+    }
+
+    stacklist defer_head{.value = call, .prev = defer_stack};
+    defer_stack = &defer_head;
+
+    return stmt(); // stmt
+}
+
 inline entt::entity parser::if_stmt() noexcept
 {
     // TODO: ensure condition is boolean-like
@@ -928,6 +966,14 @@ inline entt::entity parser::control_flow(token_kind which) noexcept
 
 inline entt::entity parser::return_stmt() noexcept
 {
+    // TODO: is this correct?
+    while (defer_stack)
+    {
+        bld.reg.get<mem_effect>(defer_stack->value).target = bld.state.mem;
+        bld.state.mem = defer_stack->value;
+        defer_stack = defer_stack->prev;
+    }
+
     // parsing
     eat(token_kind::KwReturn); // 'return'
 
@@ -1029,6 +1075,9 @@ inline entt::entity parser::stmt() noexcept
 
     case token_kind::KwType:
         return type_decl<true>();
+
+    case token_kind::KwDefer:
+        return defer_stmt();
 
     case token_kind::KwReturn:
         return return_stmt();
@@ -1178,6 +1227,8 @@ inline void parser::inline_func_decl() noexcept
 
     // TODO: is this correct?
     bld.pop_vis();
+
+    ensure(defer_stack == nullptr, "Internal compiler error: defer stack not cleared");
 
     decl(); // TODO: maybe call this inside the `block`?
 }

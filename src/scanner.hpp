@@ -75,6 +75,7 @@ inline static std::unordered_map<std::string_view, token_kind> const keywords{
     {"break", token_kind::KwBreak},
     {"const", token_kind::KwConst},
     {"continue", token_kind::KwContinue},
+    {"defer", token_kind::KwDefer},
     {"else", token_kind::KwElse},
     {"false", token_kind::KwFalse},
     {"for", token_kind::KwFor},

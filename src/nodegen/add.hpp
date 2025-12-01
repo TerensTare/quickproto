@@ -33,5 +33,7 @@ inline entt::entity add_node::emit(builder &bld, value_type const *ty) const
     }
 
     entt::entity const ins[]{lhs, rhs};
-    return bld.make(node_op::Add, ins);
+    // TODO: more cases here
+    auto const op = ty->as<int_>() ? node_op::Add : node_op::Fadd;
+    return bld.make(op, ins);
 }

@@ -24,5 +24,7 @@ inline entt::entity mul_node::emit(builder &bld, value_type const *ty) const
         return make(bld, value_node{ty});
 
     entt::entity const ins[]{lhs, rhs};
-    return bld.make(node_op::Mul, ins);
+    // TODO: more cases here
+    auto const op = ty->as<int_>() ? node_op::Mul : node_op::Fmul;
+    return bld.make(op, ins);
 }
