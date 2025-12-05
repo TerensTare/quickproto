@@ -8,8 +8,6 @@
 #include "utils/smallvec.hpp"
 
 // TODO:
-// - figure out the layout of `Proj` nodes (where you do store the projection index?)
-// ^ are `Proj` and `Load(n)` nodes the same thing?
 // - `CallStatic` and `PureCallStatic`; the second one doesn't have an `effect` link
 // - `checked_index` by default, which can be lowered to `index` iff `index < len` is `true`
 // - optimization: Loads at an index with known type are just a `const` node
@@ -19,24 +17,15 @@
 // - `delay_typecheck` component to resolve out-of-order declarations and such
 // - evaluate the type of every node when parsing, then `const_fold` would simply check `type.is_known` and replace the node with `Const(type)`
 // - (maybe) it's a good idea to mark `Return` nodes with a component, so you can later easily jump to them to cut unused functions
-// - most of the nodes have a fixed (small) number of children, so use a smallvector instead for less dynamic allocations
 // - merge non-basic edges into a single component type, interpreted based on `node_op`
 // - multi-assign + multi-declare variables
 // - store nodes by hash (hash=id, but based on node kind, etc.) - called hash-cons; it also helps with constant pooling
-// - Stores are right-to-left; enforce that (maybe by just reordering `In`?)
-// - add a control flow edge to load/store
-// - `Start` is essentially the first `Store` in the function and also a special case of `MultiNode`
-// ^ So when you `Proj` on `Start` you get a local variable
-// ^ for constant folding, you don't care about killing node inputs, just the users of a node
-// ^ then if a node has no users it is a dead node
-// - does MultiNode have many values or many inputs?
 // - Addr is just a `Proj` now; address this
 // - when visualizing, show the type of the node with `tooltip=\"\"`
 // - should loads and stores have type information in them?
 // ^ eg. `Load(from=mem_state, proj=0, as=int64_bot)` (if the value is known, the type will be lifted to have more info automatically)
 // - drop the registry for a list of storages
 // - add a `light_entity<Ts...>` to enforce component invariants
-// - also embed the op kind in each entity's id for fast checks in `peephole`
 // - (maybe): split nodes depending on type: value nodes, control flow nodes, etc...; this way you can specify more clearly the edges of nodes
 // - local variables do not need `Load`/`Store`, but globals/members do
 
@@ -106,6 +95,8 @@ enum class node_op : uint8_t
     // TODO: consistent naming (either `CallStatic` or `StaticCall`, pick one)
     CallStatic, // CallStatic In=[mem, args..., func_to_call] Out=[mem, result...]
     ExternCall, // ExternCall In=[ctrl, mem, args..., func_to_call] Out=[ctrl, mem, result...]
+
+    Cast, // Cast In=[mem, expr] Type=[TargetType] Out=[mem, exprCastedToTargetType]
 
     Addr,  // Addr Value=someRegister
     Const, // Const Value=someValue

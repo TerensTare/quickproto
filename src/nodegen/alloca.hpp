@@ -17,6 +17,7 @@ static_assert(nodegen<alloca_node>);
 
 inline value_type const *alloca_node::infer(type_storage const &types) const
 {
+    // TODO: typecheck here, make sure you can init with the given arguments
     return ty;
 }
 

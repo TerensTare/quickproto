@@ -3,7 +3,7 @@
 #include <memory>
 
 #include "backends/dot.hpp"
-#include "parser.hpp"
+#include "parser/all.hpp"
 
 // TODO: parallelize DCE function calls, spawning them in a background thread each time a function is parsed
 // ^ how does this play out with "no forward declarations?"

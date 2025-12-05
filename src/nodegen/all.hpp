@@ -35,6 +35,7 @@
 
 // memory state
 #include "nodegen/alloca.hpp"
+#include "nodegen/cast.hpp"
 #include "nodegen/load.hpp"
 #include "nodegen/store.hpp"
 

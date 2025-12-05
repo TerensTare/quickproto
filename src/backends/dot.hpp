@@ -50,14 +50,13 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
             return std::format_to(out, "[label=\"{}\"]", int_->n);
         else if (auto &&bool_ = type.type->as<bool_const>())
             return std::format_to(out, "[label=\"{}\"]", bool_->b);
+        else if (auto &&flt = type.type->as<float64>())
+            return std::format_to(out, "[label=\"{}\"]", flt->d);
         else if (auto &&arr = type.type->as<array_type>())
         {
             // TODO: intern arrays to static memory on `value_type`
             // TODO: show the size here if available
-            if (arr->base->as<::int_>())
-                return std::format_to(out, "[label=\"[]int\"]");
-            else if (arr->base->as<::bool_>())
-                return std::format_to(out, "[label=\"[]bool\"]");
+            return std::format_to(out, "[label=\"[]{}\"]", arr->base->name());
         }
         // TODO: implement other cases
     }
@@ -123,6 +122,9 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
         return named_node("CallStatic");
     case node_op::ExternCall:
         return named_node("ExternCall");
+
+    case node_op::Cast:
+        return named_node("Cast");
 
     default:
 #define console_yellow "\033[33m"
