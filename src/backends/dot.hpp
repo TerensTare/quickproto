@@ -24,10 +24,14 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
     auto &&[op, type] = reg.get<node_op const, node_type const>(id);
     switch (op)
     {
+        // TODO: optimize this; handle non-const case
     case node_op::Load:
-        return named_node("Load");
+        return std::format_to(out, "[label=\"Load({})\"]", reg.get<mem_effect const>(id).offset->as<int_const>()->n);
+
+        // TODO: optimize this; handle non-const case
     case node_op::Store:
-        return named_node("Store");
+        return std::format_to(out, "[label=\"Store({})\"]", reg.get<mem_effect const>(id).offset->as<int_const>()->n);
+
     case node_op::Alloca:
         return named_node("Alloca"); // TODO: show the type of the node instead
     case node_op::Start:
@@ -168,7 +172,10 @@ inline void dot_backend::compile(FILE *out, entt::registry const &reg)
 
     // TODO: do you really need to show memory effect nodes?
     for (auto [dep, in] : reg.storage<mem_effect>()->each())
+    {
+        std::println(out, "  n{} -> n{} [color=blue, style=dotted];", dep, in.prev);
         std::println(out, "  n{} -> n{} [color=blue];", dep, in.target);
+    }
 
     for (auto [phi, region] : reg.storage<region_of_phi>()->each())
         std::println(out, "  n{} -> n{} [style=dotted];", phi, region.region);

@@ -62,7 +62,9 @@ inline entt::entity make(builder &bld, Gen const &gen)
 
     if constexpr (requires { typename Gen::mem_node; })
     {
-        bld.reg.emplace<mem_effect>(n, bld.state.mem);
+        // TODO: separate mem_read/mem_write here
+        // TODO: set the target here; for alloca/callstatic it is the function Start
+        bld.reg.emplace<mem_effect>(n) = {.prev = bld.state.mem, .target = bld.state.func};
         bld.state.mem = n;
     }
 

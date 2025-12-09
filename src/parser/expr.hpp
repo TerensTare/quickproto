@@ -83,7 +83,11 @@ inline entt::entity parser::index(entt::entity base) noexcept
     // codegen
 
     // TODO: is this correct? (consider mutability, generalizing `Load`, etc.)
-    auto const node = make(bld, load_node{.base = base, .offset = i});
+    // TODO: error if node is not integer
+    auto const node = make(bld, load_node{
+                                    .base = base,
+                                    .offset = bld.reg.get<node_type>(i).type->as<int_>(),
+                                });
 
     // TODO: how do you make sure it happens before any possible store, but still optimize it out if only load?
 
@@ -123,9 +127,10 @@ inline entt::entity parser::member(entt::entity base) noexcept
 
     // TODO: is this correct? (consider mutability, generalizing `Load`, etc.)
     // TODO: calculate the offset of the member and pass it to the load nodes
+    // TODO: error if the node is not integer
     auto const node = make(bld, load_node{
                                     .base = base,
-                                    .offset = offset_node,
+                                    .offset = bld.reg.get<node_type>(offset_node).type->as<int_>(),
                                 });
 
     // TODO: how do you make sure it happens before any possible store, but still optimize it out if only load?

@@ -58,6 +58,10 @@ int main(int argc, char **argv)
     auto f = fopen(args.out_path, "w");
     ensure(f, "Cannot open output file!");
 
+    // TODO: call this from somewhere else
+    memory_reorder(p.bld);
+    // TODO: run DCE after memory reordering
+
     dot_backend dot;
     dot.compile(f, p.bld.reg);
 

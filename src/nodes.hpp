@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <entt/entity/entity.hpp>
+#include "types/int.hpp"
 #include "utils/smallvec.hpp"
 
 // TODO:
@@ -137,11 +138,25 @@ struct ctrl_effect final
 };
 
 // component
-// (id) -> effect{target} means that `id` affects the `target` node
 // used for nodes that affect memory, such as stores
 struct mem_effect final
 {
-    entt::entity target;
+    // TODO: you don't really need this here, it is deduced later by global code motion
+    entt::entity prev;   // link to the operation before this one
+    entt::entity target; // the node from which this node reads from/writes to
+    int_ const *offset;
+};
+
+// component
+// present on nodes with a `mem_effect` that perform reads
+struct mem_read final
+{
+};
+
+// component
+// present on nodes with a `mem_effect` that performs writes
+struct mem_write final
+{
 };
 
 // component

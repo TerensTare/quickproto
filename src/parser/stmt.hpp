@@ -37,12 +37,6 @@ inline entt::entity parser::assign(entt::entity lhs) noexcept
 
     // codegen
 
-    // TODO: is this correct? it ensures that rhs is evaluated before lhs
-    // bld.reg.get<mem_effect>(lhs).target = rhs;
-    // bld.state.mem = lhs;
-
-    // TODO: do you need to codegen a `Load` for lhs?
-
     // TODO: update the environment
     auto const store = make(bld, store_node{
                                      .lhs = lhs,
@@ -77,12 +71,6 @@ inline entt::entity parser::compound_assign(entt::entity lhs) noexcept
     eat(token_kind::Semicolon); // ';'
 
     // codegen
-
-    // TODO: is this correct? it ensures that rhs is evaluated before lhs
-    bld.reg.get<mem_effect>(lhs).target = rhs;
-    bld.state.mem = lhs;
-
-    // TODO: do you need to codegen a `Load` for lhs?
 
     auto const opnode =
         optok == token_kind::PlusEqual
@@ -329,6 +317,7 @@ inline entt::entity parser::return_stmt() noexcept
     while (defer_stack)
     {
         bld.reg.get<mem_effect>(defer_stack->value).target = bld.state.mem;
+        // TODO: add read/write here
         bld.state.mem = defer_stack->value;
 
         bld.reg.get<ctrl_effect>(defer_stack->value).target = bld.state.ctrl;

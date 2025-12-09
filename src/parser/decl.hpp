@@ -2,6 +2,7 @@
 #pragma once
 
 #include "parser/base.hpp"
+#include "opt/all.hpp"
 
 // TODO: move the `type` rules to a separate file
 
@@ -465,6 +466,8 @@ inline void parser::codegen_main() noexcept
     bld.reg.storage<node_inputs>();
     bld.reg.storage<ctrl_effect>();
     bld.reg.storage<mem_effect>();
+    bld.reg.storage<mem_read>();
+    bld.reg.storage<mem_write>();
     bld.reg.storage<region_of_phi>();
 
     // TODO: most of these checks should be made by `call_static`
