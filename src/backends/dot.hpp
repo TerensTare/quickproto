@@ -48,23 +48,13 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
         // HACK: temporary
         return std::format_to(out, "[label=\"Proj\"]");
 
-    case node_op::Const:
-    {
-        if (auto &&int_ = type.type->as<int_const>())
-            return std::format_to(out, "[label=\"{}\"]", int_->n);
-        else if (auto &&bool_ = type.type->as<bool_const>())
-            return std::format_to(out, "[label=\"{}\"]", bool_->b);
-        else if (auto &&flt = type.type->as<float64>())
-            return std::format_to(out, "[label=\"{}\"]", flt->d);
-        else if (auto &&arr = type.type->as<array_type>())
-        {
-            // TODO: intern arrays to static memory on `value_type`
-            // TODO: show the size here if available
-            return std::format_to(out, "[label=\"[]{}\"]", arr->base->name());
-        }
-        // TODO: implement other cases
-    }
-    break;
+    case node_op::IConst:
+        return std::format_to(out, "[label=\"{}\"]", type.type->as<int_const>()->n);
+    case node_op::FConst:
+        return std::format_to(out, "[label=\"{}\"]", type.type->as<float64>()->d);
+    case node_op::BConst:
+        return std::format_to(out, "[label=\"{}\"]", type.type->as<bool_const>()->b);
+
     case node_op::Addr:
         return std::format_to(out, "[label=\"Addr({})\"]", type.type->as<int_const>()->n);
     case node_op::UnaryNeg:

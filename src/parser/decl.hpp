@@ -24,7 +24,7 @@ inline void parser::const_decl() noexcept
     // mem_state = store;
 
     // TODO: mark the name as non-modifiable somehow
-    env.new_value(scan.lexeme(name), init);
+    env.new_value(name.hash, init);
 
     // NOTE: no need to prune dead code here, everything is done at compile time
 
@@ -88,8 +88,7 @@ inline void parser::inline_func_decl() noexcept
 
     bld.reg.get<node_type>(bld.state.mem).type = new func{false, ret_type, (size_t)param_i, std::move(param_types_list)};
 
-    auto name = scan.lexeme(nametok);
-    if (env.top->table.contains(name))
+    if (env.top->table.contains(nametok.hash))
         fail(nametok, "Function already defined");
 
     // TODO: should the function point to the `Start`, `Return`, or where?
@@ -97,7 +96,7 @@ inline void parser::inline_func_decl() noexcept
     // ^ this way you don't need to specially handle the case where a `return void` function does not have a `return` stmt
     // TODO: should it be memory or ctrl? probably ctrl since after parsing it points to the `Return`
     // TODO: ^ maybe all state nodes, rather than just one
-    env.new_value(name, bld.state.mem);
+    env.new_value(nametok.hash, bld.state.mem);
 
     // TODO: typecheck that the return type matches what's expected
     // TODO: is this actually the `Return` node?
@@ -153,9 +152,11 @@ inline void parser::extern_func_decl() noexcept
 
     // parsing
 
+    using namespace entt::literals;
+
     eat(token_kind::At);                      // '@'
     auto const attr = eat(token_kind::Ident); // <ident>
-    if (scan.lexeme(attr) != "extern")
+    if ((uint32_t)attr.hash != "extern"_hs)
         fail(attr, "Parsed unknown annotation");
 
     eat(token_kind::KwFunc);               // 'func'
@@ -195,9 +196,8 @@ inline void parser::extern_func_decl() noexcept
 
     bld.reg.get<node_type>(bld.state.mem).type = new func{true, ret_type, (size_t)param_i, std::move(param_types_list)};
 
-    auto name = scan.lexeme(nametok);
     // TODO: drop the check either from here or from env
-    if (env.top->table.contains(name))
+    if (env.top->table.contains(nametok.hash))
         fail(nametok, "Function already defined");
 
     // TODO: should the function point to the `Start`, `Return`, or where?
@@ -205,7 +205,7 @@ inline void parser::extern_func_decl() noexcept
     // ^ this way you don't need to specially handle the case where a `return void` function does not have a `return` stmt
     // TODO: should it be memory or ctrl? probably ctrl since after parsing it points to the `Return`
     // TODO: ^ maybe all state nodes, rather than just one
-    env.new_value(name, bld.state.mem);
+    env.new_value(nametok.hash, bld.state.mem);
 
     bld.state = old_state;
 
@@ -229,7 +229,7 @@ inline auto parser::var_decl() noexcept -> std::conditional_t<AsStmt, decltype(s
 
     // codegen
 
-    env.new_value(scan.lexeme(name), init);
+    env.new_value(name.hash, init);
 
     if constexpr (AsStmt)
         return stmt();
@@ -270,15 +270,13 @@ inline auto parser::alias_decl(token nametok) noexcept -> std::conditional_t<AsS
 
     // codegen
 
-    auto name = scan.lexeme(nametok);
-
     // TODO: check type is not already defined
     // TODO: are type names shadowed? if not, search the whole environment
     // TODO: drop the check either from here or from inside env.new_type
-    if (auto const n = env.get_name(name); is_type(n))
+    if (auto const n = env.get_name(nametok.hash); is_type(n))
         fail(nametok, "Type is already defined!");
 
-    env.new_type(name, ty);
+    env.new_type(nametok.hash, ty);
 
     // NOTE: no need to prune dead code here, everything is done at compile time
 
@@ -316,7 +314,10 @@ inline auto parser::struct_decl(token nametok) noexcept -> std::conditional_t<As
             auto const mem_ty = type();        // type
             eat(token_kind::Semicolon);        // ';'
 
-            auto mem_node = stacklist{.value = member_info{.name = scan.lexeme(mem_name), .type = mem_ty}, .prev = members};
+            auto mem_node = stacklist{
+                .value = member_info{.name = mem_name.hash, .type = mem_ty},
+                .prev = members,
+            };
             return self(self, &mem_node, n + 1);
         }
 
@@ -332,8 +333,7 @@ inline auto parser::struct_decl(token nametok) noexcept -> std::conditional_t<As
     auto ty = parse_members(parse_members, nullptr, 0); // (member_decl ';')* '}'
     eat(token_kind::Semicolon);                         // ';'
 
-    auto name = scan.lexeme(nametok);
-    env.new_type(name, ty);
+    env.new_type(nametok.hash, ty);
 
     // NOTE: no need to prune dead code here, everything is done at compile time
 
@@ -370,8 +370,13 @@ inline void parser::decl() noexcept
     }
 }
 
-inline void parser::prog() noexcept
+inline void parser::package() noexcept
 {
+    // TODO: use the name of the package when exporting
+    eat(token_kind::KwPackage);                  // 'package'
+    auto const nametok = eat(token_kind::Ident); // <ident>
+    eat(token_kind::Semicolon);                  // ';'
+
     // TODO: is this correct?
     scope_visibility vis;
     bld.push_vis<visibility::global>(vis);
@@ -399,8 +404,7 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
     bld.reg.get<node_type>(node).type = ty;
 
     // TODO: these params should be defined in the function's block, not on global env
-    auto const name = scan.lexeme(nametok);
-    env.new_value(name, node);
+    env.new_value(nametok.hash, node);
 
     return ty;
 }
@@ -447,8 +451,7 @@ inline value_type const *parser::named_type() noexcept
     auto const nametok = eat(token_kind::Ident); // type
 
     // TODO: make this into a function
-    auto name = scan.lexeme(nametok);
-    auto const index = env.get_name(name);
+    auto const index = env.get_name(nametok.hash);
 
     // TODO: if the name is not declared yet, this still returns nullptr, is this correct?
     return (uint32_t(index) & uint32_t(name_index::type_mask))
@@ -470,8 +473,11 @@ inline void parser::codegen_main() noexcept
     bld.reg.storage<mem_write>();
     bld.reg.storage<region_of_phi>();
 
+    using namespace entt::literals;
+
     // TODO: most of these checks should be made by `call_static`
-    auto const main_iter = env.top->table.find(std::string_view{"main"});
+    // TODO: do something better for lookup here
+    auto const main_iter = env.top->table.find((hashed_name)(uint32_t)"main"_hs);
     ensure(main_iter != env.top->table.end(), "Program does not define a main function!");
     auto const main_node = env.values[(uint32_t)main_iter->second];
     auto const main_ty = bld.reg.get<node_type const>(main_node).type;

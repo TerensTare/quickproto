@@ -197,7 +197,7 @@ struct parser final
     inline entt::entity simple_stmt() noexcept;
 
     // stmt ::= '}'
-    //        | alias_decl
+    //        | type_decl
     //        | var_decl
     //        | block stmt
     //        | defer_stmt
@@ -222,30 +222,29 @@ struct parser final
     // HACK: handle `extern` just like other annotations
     inline void extern_func_decl() noexcept;
 
-    // 'var' <ident> type '=' expr ';' decl
+    // 'var' <ident> type '=' expr ';' stmt-or-decl
     // if parsed inside a block, this is treated as a statement and is followed by a `stmt` rather than a decl
     template <bool AsStmt>
     inline auto var_decl() noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>;
-    // alias_decl
-    // ^ ie. right now this rule only parses alias declarations
+    // struct_decl | alias_decl
     // if parsed inside a block, this is treated as a statement and is followed by a `stmt` rather than a decl
     template <bool AsStmt>
     inline auto type_decl() noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>;
-    // 'type' <ident> type ';' decl
+    // 'type' <ident> type ';' stmt-or-decl
     // if parsed inside a block, this is treated as a statement and is followed by a `stmt` rather than a decl
     template <bool AsStmt>
     inline auto alias_decl(token nametok) noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>;
-    // 'type' <ident> 'struct' '{' (member_decl ';')* '}'
+    // 'type' <ident> 'struct' '{' (member_decl ';')* '}' ';' stmt-or-decl
     // member_decl ::= <ident> type
     // TODO: is `member_decl` and `param_decl` the same rule?
     template <bool AsStmt>
     inline auto struct_decl(token nametok) noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>;
 
-    // const_decl | func_decl | var_decl
+    // const_decl | func_decl | var_decl | type_decl
     // func_decl ::= extern_func_decl | inline_func_decl
     inline void decl() noexcept;
-    // decl
-    inline void prog() noexcept;
+    // 'package' <ident> ';' decl
+    inline void package() noexcept;
 
     scanner scan;
     builder bld;
@@ -265,7 +264,6 @@ private:
     // | ident
     [[nodiscard]]
     inline entt::entity type_expr_or_ident() noexcept;
-
 
     // <ident> type
     // i is the index of the parameter in the function declaration (used by the Proj node emitted for the parameter)
@@ -313,6 +311,7 @@ private:
 
     inline entt::entity binary_node(token_kind kind, entt::entity lhs, entt::entity rhs) noexcept;
 
+    // HACK: don't pass the string pool here
     inline static ::env global_scope(scope *global) noexcept;
 };
 
@@ -440,10 +439,12 @@ inline ::env parser::global_scope(scope *global) noexcept
     // defs
     // TODO: add built-in functions, such as `print`
 
+    using namespace entt::literals;
+
     // types
-    e.new_type("int", int_bot::self());
-    e.new_type("bool", bool_bot::self());
-    e.new_type("float64", float_bot::self());
+    e.new_type((hashed_name)(uint32_t)"int"_hs, int_bot::self());
+    e.new_type((hashed_name)(uint32_t)"bool"_hs, bool_bot::self());
+    e.new_type((hashed_name)(uint32_t)"float64"_hs, float_bot::self());
     // TODO: more built-in types
 
     return e;

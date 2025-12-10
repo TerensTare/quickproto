@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "token.hpp"
 #include "types/value.hpp"
 
 // internal compiler error: member offset should be known at compile time
@@ -17,7 +18,7 @@ struct variable_member_access final : value_error
 
 struct member_info final
 {
-    std::string_view name;
+    hashed_name name;
     value_type const *type;
 };
 

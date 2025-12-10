@@ -60,6 +60,7 @@ enum class token_kind : uint8_t
     KwFunc,
     KwIf,
     KwNil,
+    KwPackage,
     KwReturn,
     KwStruct,
     KwTrue,
@@ -76,10 +77,25 @@ enum class token_kind : uint8_t
     Unknown,
 };
 
+enum class hashed_name : std::uint32_t
+{
+};
+
+// NOTE: despite the name, this hashes a `hashed_name`, not a `token`
+struct token_hash final
+{
+    static constexpr size_t operator()(hashed_name h) noexcept { return (uint32_t)h; }
+};
+
 struct token final
 {
     constexpr uint32_t finish() const noexcept { return start + len; }
 
+    // TODO: if you have the hash + kind you don't really need the length (you do for integers, etc. tho)
+    // maybe it's best to pre-parse integers/double etc. in a uint64/double rather than keep the length, not much value in it
     token_kind kind;
+    hashed_name hash; // present on keyword/ident, but do not rely on it for keyword detection
     uint32_t start, len;
 };
+
+static_assert(sizeof(token) == sizeof(uint64_t[2]));

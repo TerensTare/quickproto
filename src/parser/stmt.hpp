@@ -17,8 +17,7 @@ inline entt::entity parser::local_decl(token lhs) noexcept
 
     // TODO: is this correct?
     // TODO: pass a list<expr> and keep a list of their spans; if they are 'ident's their span should be the name
-    auto const name = scan.lexeme(lhs);
-    env.new_value(name, rhs);
+    env.new_value(lhs.hash, rhs);
 
     return stmt();
 }
@@ -28,7 +27,7 @@ inline entt::entity parser::assign(entt::entity lhs) noexcept
     // parsing
     eat(token_kind::Equal); // '='
 
-    // auto const name = scan.lexeme(id);
+    // auto const name = str.intern(id);
     // auto const lhs = env.get_var(name);
 
     // TODO: handle multi-expression case
@@ -63,7 +62,7 @@ inline entt::entity parser::compound_assign(entt::entity lhs) noexcept
 
     auto const optok = eat(ops).kind; // compound_op
 
-    // auto const name = scan.lexeme(id);
+    // auto const name = str.intern(id);
     // auto const lhs = env.get_var(name);
 
     // TODO: handle multi-expression case
@@ -114,7 +113,7 @@ inline entt::entity parser::post_op(entt::entity lhs) noexcept
 
     // TODO: do you need to codegen a load for lhs?
 
-    // auto const name = scan.lexeme(id);
+    // auto const name = str.intern(id);
     // auto const lhs = env.get_var(name);
     auto const rhs = make(bld, value_node{int_const::value(1)});
 

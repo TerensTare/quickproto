@@ -17,7 +17,14 @@ inline value_type const *value_node::infer(type_storage const &) const { return 
 
 inline entt::entity value_node::emit(builder &bld, value_type const *ty) const
 {
-    auto const n = bld.make(node_op::Const);
+    // TODO: more cases here
+    auto const kind = (ty->as<int_const>())
+                          ? node_op::IConst
+                      : (ty->as<float64>())
+                          ? node_op::FConst
+                          : node_op::BConst;
+
+    auto const n = bld.make(kind);
     bld.reg.get<node_type>(n).type = ty;
 
     return n;

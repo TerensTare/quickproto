@@ -110,11 +110,10 @@ inline entt::entity parser::member(entt::entity base) noexcept
     if (!ty)
         fail(dot, "Cannot access member of type!");
 
-    auto const mem_name = scan.lexeme(mem);
     int32_t offset = -1;
     for (size_t i{}; i < ty->n_members; ++i)
     {
-        if (ty->members[i].name == mem_name)
+        if (ty->members[i].name == mem.hash)
         {
             offset = i;
             break;
@@ -352,8 +351,7 @@ inline entt::entity parser::type_expr_or_ident() noexcept
     if (scan.peek.kind == token_kind::Ident)
     {
         auto const nametok = scan.next();
-        auto const name = scan.lexeme(nametok);
-        auto const index = env.get_name(name);
+        auto const index = env.get_name(nametok.hash);
 
         if (is_type(index))
             ty = env.type(index);

@@ -53,7 +53,7 @@ int main(int argc, char **argv)
         .scan{.text = text.get()},
     };
 
-    p.prog();
+    p.package();
 
     auto f = fopen(args.out_path, "w");
     ensure(f, "Cannot open output file!");

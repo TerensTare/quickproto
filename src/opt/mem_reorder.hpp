@@ -13,7 +13,7 @@ inline void memory_reorder(builder &bld) noexcept
     auto const &reads = bld.reg.storage<mem_read>();
     auto const &writes = bld.reg.storage<mem_write>();
 
-    for (auto &&[id, mem] : entt::basic_view{mem_chain, reads}.each())
+    for (auto &&[id, mem] : mem_chain.each())
     {
         auto earliest_dep = mem.prev;
 
@@ -21,9 +21,11 @@ inline void memory_reorder(builder &bld) noexcept
         {
             auto &&prev = mem_chain.get(earliest_dep);
 
-            if (reads.contains(earliest_dep))
+            if (writes.contains(earliest_dep) &&
+                // TODO: correctly check for offset equality
+                ((mem.target != prev.target) || mem.offset != prev.offset))
             {
-                // Read operations can happen in parallel
+                // Reads/writes can happen in parallel with writes as long as they target different places or offsets
                 earliest_dep = prev.prev;
             }
             else
@@ -37,7 +39,7 @@ inline void memory_reorder(builder &bld) noexcept
         mem.prev = earliest_dep;
     }
 
-    for (auto &&[id, mem] : entt::basic_view{mem_chain, writes}.each())
+    for (auto &&[id, mem] : entt::basic_view{mem_chain, reads}.each())
     {
         auto earliest_dep = mem.prev;
 
@@ -45,11 +47,9 @@ inline void memory_reorder(builder &bld) noexcept
         {
             auto &&prev = mem_chain.get(earliest_dep);
 
-            if (writes.contains(earliest_dep) &&
-                // TODO: correctly check for offset equality
-                ((mem.target != prev.target) || mem.offset != prev.offset))
+            if (reads.contains(earliest_dep))
             {
-                // Writes to different places (or offsets) can happen in parallel
+                // Read operations can happen in parallel
                 earliest_dep = prev.prev;
             }
             else

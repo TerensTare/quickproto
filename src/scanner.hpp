@@ -82,6 +82,7 @@ inline static std::unordered_map<std::string_view, token_kind> const keywords{
     {"func", token_kind::KwFunc},
     {"if", token_kind::KwIf},
     {"nil", token_kind::KwNil},
+    {"package", token_kind::KwPackage},
     {"return", token_kind::KwReturn},
     {"struct", token_kind::KwStruct},
     {"true", token_kind::KwTrue},
@@ -134,9 +135,19 @@ inline token scanner::next() noexcept
         .len = uint32_t(iter.text - text) - start,
     };
 
-    if (auto const iter = keywords.find(lexeme(peek)); iter != keywords.end())
+    // TODO: do something more efficient
+    // probably best to take care of this branch when parsing the token kind (you are double checking here)
+    if (peek.kind == token_kind::Ident)
     {
-        peek.kind = iter->second;
+        auto const str = lexeme(peek);
+        peek.hash = (hashed_name)(uint32_t)entt::hashed_string::value(str.data(), str.size());
+
+        // TODO: use the hash here (maybe) keep a simple array and match?
+        // ^ or rather, keep 2 arrays; one for the hashes one for the kind
+        if (auto const iter = keywords.find(str); iter != keywords.end())
+        {
+            peek.kind = iter->second;
+        }
     }
 
     return old;

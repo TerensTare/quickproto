@@ -23,11 +23,8 @@
 // - store nodes by hash (hash=id, but based on node kind, etc.) - called hash-cons; it also helps with constant pooling
 // - Addr is just a `Proj` now; address this
 // - when visualizing, show the type of the node with `tooltip=\"\"`
-// - should loads and stores have type information in them?
-// ^ eg. `Load(from=mem_state, proj=0, as=int64_bot)` (if the value is known, the type will be lifted to have more info automatically)
 // - drop the registry for a list of storages
 // - add a `light_entity<Ts...>` to enforce component invariants
-// - (maybe): split nodes depending on type: value nodes, control flow nodes, etc...; this way you can specify more clearly the edges of nodes
 // - local variables do not need `Load`/`Store`, but globals/members do
 
 // DONE:
@@ -99,9 +96,11 @@ enum class node_op : uint8_t
 
     Cast, // Cast In=[mem, expr] Type=[TargetType] Out=[mem, exprCastedToTargetType]
 
-    Addr,  // Addr Value=someRegister
-    Const, // Const Value=someValue
-    Error, // TODO: temporary hack
+    Addr,   // Addr Value=someRegister
+    IConst, // IConst Value=someInt
+    FConst, // FConst Value=someFloat
+    BConst, // BConst Value=someBool
+    Error,  // TODO: temporary hack
 };
 
 // component

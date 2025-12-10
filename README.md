@@ -8,18 +8,22 @@ Source code > Lexing > (Parsing + SoN generation + peephole/optimizing SoN) > De
 ```
 
 Here is a list of the passes implemented in the peephole stage so far:
-- [x] Constant folding for the following nodes:
+- Constant folding for the following nodes:
     - arithmetic: `+`, `-`, `*`, `/`
     - bit logic: `&`, `^`, `|`
     - unary: `-const(x)` to `const(-x)`
     - identity comparisons: `a == a` to `true`, `a != a` to `false`, same thing for `<`, `<=`, `>`, `>=`
-    - Loads: two consecutive loads can be computed independently and reordered as needed
+- Strength reduction:
+    - `a + a` is transformed into `a * 2`
+- Memory reordering:
+    - Two consecutive reads can be computed independently and reordered as needed
+    - A read/write can be parallel to another write as long as they both do not touch the same location and index
 
 ## Building
 
 ### 📋 Prerequisites
 
-- [ ] A C++23 compiler that supports `std::print`.
+- [ ] A C++23 compiler that supports `std::print` and `static operator()`.
 - [ ] CMake 3.25 or later.
 - [ ] [vcpkg](https://github.com/microsoft/vcpkg) to manage project dependencies. Make sure to set the `VCPKG_ROOT` environment variable as described in the official docs.
 
