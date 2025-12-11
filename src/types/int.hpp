@@ -5,208 +5,214 @@
 #include <entt/container/dense_map.hpp>
 #include "types/bool.hpp"
 
-struct int_ : value_type
+struct int_value : value
 {
-    inline value_type const *assign(value_type const *rhs) const noexcept
+    inline value const *assign(value const *rhs) const noexcept
     {
-        return rhs->as<int_>()
+        return rhs->as<int_value>()
                    ? rhs
-                   : value_type::assign(rhs);
+                   : value::assign(rhs);
     }
 
     inline char const *name() const noexcept final { return "int"; }
 };
 
-struct int_top final : int_
+struct int_top final : int_value
 {
-    inline static value_type const *self() noexcept
+    inline static value const *self() noexcept
     {
         static int_top top;
         return &top;
     }
 
-    // impl value_type
+    // impl value
 
-    inline value_type const *add(value_type const *rhs) const noexcept
+    inline value const *add(value const *rhs) const noexcept
     {
-        return (rhs->as<int_>())
+        return (rhs->as<int_value>())
                    ? rhs
-                   : value_type::add(rhs);
+                   : value::add(rhs);
     }
 
-    inline value_type const *sub(value_type const *rhs) const noexcept
+    inline value const *sub(value const *rhs) const noexcept
     {
-        return (rhs->as<int_>())
+        return (rhs->as<int_value>())
                    ? rhs
-                   : value_type::sub(rhs);
+                   : value::sub(rhs);
     }
 
-    inline value_type const *mul(value_type const *rhs) const noexcept
+    inline value const *mul(value const *rhs) const noexcept
     {
-        return (rhs->as<int_>())
+        return (rhs->as<int_value>())
                    ? rhs
-                   : value_type::mul(rhs);
+                   : value::mul(rhs);
     }
 
-    inline value_type const *div(value_type const *rhs) const noexcept
+    inline value const *div(value const *rhs) const noexcept
     {
-        return (rhs->as<int_>())
+        return (rhs->as<int_value>())
                    ? rhs
-                   : value_type::div(rhs);
+                   : value::div(rhs);
     }
 
-    inline value_type const *neg() const noexcept { return this; }
+    inline value const *neg() const noexcept { return this; }
 
-    inline value_type const *eq(value_type const *rhs) const noexcept
+    inline value const *eq(value const *rhs) const noexcept
     {
-        return (rhs->as<int_>())
+        return (rhs->as<int_value>())
                    ? bool_top::self()
-                   : value_type::eq(rhs);
+                   : value::eq(rhs);
     }
 
-    inline value_type const *ne(value_type const *rhs) const noexcept
+    inline value const *ne(value const *rhs) const noexcept
     {
-        return (rhs->as<int_>())
+        return (rhs->as<int_value>())
                    ? bool_top::self()
-                   : value_type::ne(rhs);
+                   : value::ne(rhs);
     }
 
-    inline value_type const *lt(value_type const *rhs) const noexcept
+    inline value const *lt(value const *rhs) const noexcept
     {
-        return (rhs->as<int_>())
+        return (rhs->as<int_value>())
                    ? bool_top::self()
-                   : value_type::lt(rhs);
+                   : value::lt(rhs);
     }
 
-    inline value_type const *le(value_type const *rhs) const noexcept
+    inline value const *le(value const *rhs) const noexcept
     {
-        return (rhs->as<int_>())
+        return (rhs->as<int_value>())
                    ? bool_top::self()
-                   : value_type::le(rhs);
+                   : value::le(rhs);
     }
 
-    inline value_type const *gt(value_type const *rhs) const noexcept
+    inline value const *gt(value const *rhs) const noexcept
     {
-        return (rhs->as<int_>())
+        return (rhs->as<int_value>())
                    ? bool_top::self()
-                   : value_type::gt(rhs);
+                   : value::gt(rhs);
     }
 
-    inline value_type const *ge(value_type const *rhs) const noexcept
+    inline value const *ge(value const *rhs) const noexcept
     {
-        return (rhs->as<int_>())
+        return (rhs->as<int_value>())
                    ? bool_top::self()
-                   : value_type::ge(rhs);
+                   : value::ge(rhs);
     }
 };
 
-struct int_bot final : int_
+struct int_bot final : int_value
 {
-    inline static value_type const *self() noexcept
+    inline static value const *self() noexcept
     {
         static int_bot bot;
         return &bot;
     }
 
-    // impl value_type
+    // impl value
 
-    inline value_type const *add(value_type const *rhs) const noexcept
+    inline value const *add(value const *rhs) const noexcept
     {
-        return rhs->as<int_>()
-                   ? (value_type const *)this
-                   : value_type::add(rhs);
+        return rhs->as<int_value>()
+                   ? (value const *)this
+                   : value::add(rhs);
     }
 
-    inline value_type const *sub(value_type const *rhs) const noexcept
+    inline value const *sub(value const *rhs) const noexcept
     {
-        return rhs->as<int_>()
-                   ? (value_type const *)this
-                   : value_type::sub(rhs);
+        return rhs->as<int_value>()
+                   ? (value const *)this
+                   : value::sub(rhs);
     }
 
-    inline value_type const *mul(value_type const *rhs) const noexcept
+    inline value const *mul(value const *rhs) const noexcept
     {
-        return rhs->as<int_>()
-                   ? (value_type const *)this
-                   : value_type::mul(rhs);
+        return rhs->as<int_value>()
+                   ? (value const *)this
+                   : value::mul(rhs);
     }
 
-    inline value_type const *div(value_type const *rhs) const noexcept
+    inline value const *div(value const *rhs) const noexcept
     {
-        return rhs->as<int_>()
-                   ? (value_type const *)this
-                   : value_type::div(rhs);
+        return rhs->as<int_value>()
+                   ? (value const *)this
+                   : value::div(rhs);
     }
 
-    inline value_type const *neg() const noexcept { return this; }
+    inline value const *neg() const noexcept { return this; }
 
-    inline value_type const *eq(value_type const *rhs) const noexcept
+    inline value const *eq(value const *rhs) const noexcept
     {
-        return rhs->as<int_>()
-                   ? (value_type const *)this
-                   : value_type::eq(rhs);
+        return rhs->as<int_value>()
+                   ? (value const *)this
+                   : value::eq(rhs);
     }
 
-    inline value_type const *ne(value_type const *rhs) const noexcept
+    inline value const *ne(value const *rhs) const noexcept
     {
-        return rhs->as<int_>()
-                   ? (value_type const *)this
-                   : value_type::ne(rhs);
+        return rhs->as<int_value>()
+                   ? (value const *)this
+                   : value::ne(rhs);
     }
 
-    inline value_type const *lt(value_type const *rhs) const noexcept
+    inline value const *lt(value const *rhs) const noexcept
     {
-        return rhs->as<int_>()
-                   ? (value_type const *)this
-                   : value_type::lt(rhs);
+        return rhs->as<int_value>()
+                   ? (value const *)this
+                   : value::lt(rhs);
     }
 
-    inline value_type const *le(value_type const *rhs) const noexcept
+    inline value const *le(value const *rhs) const noexcept
     {
-        return rhs->as<int_>()
-                   ? (value_type const *)this
-                   : value_type::le(rhs);
+        return rhs->as<int_value>()
+                   ? (value const *)this
+                   : value::le(rhs);
     }
 
-    inline value_type const *gt(value_type const *rhs) const noexcept
+    inline value const *gt(value const *rhs) const noexcept
     {
-        return rhs->as<int_>()
-                   ? (value_type const *)this
-                   : value_type::gt(rhs);
+        return rhs->as<int_value>()
+                   ? (value const *)this
+                   : value::gt(rhs);
     }
 
-    inline value_type const *ge(value_type const *rhs) const noexcept
+    inline value const *ge(value const *rhs) const noexcept
     {
-        return rhs->as<int_>()
-                   ? (value_type const *)this
-                   : value_type::ge(rhs);
+        return rhs->as<int_value>()
+                   ? (value const *)this
+                   : value::ge(rhs);
     }
 
-    inline value_type const *band(value_type const *rhs) const noexcept
+    inline value const *band(value const *rhs) const noexcept
     {
-        return rhs->as<int_>()
-                   ? (value_type const *)this
-                   : value_type::band(rhs);
+        return rhs->as<int_value>()
+                   ? (value const *)this
+                   : value::band(rhs);
     }
 
-    inline value_type const *bxor(value_type const *rhs) const noexcept
+    inline value const *bxor(value const *rhs) const noexcept
     {
-        return rhs->as<int_>()
-                   ? (value_type const *)this
-                   : value_type::bxor(rhs);
+        return rhs->as<int_value>()
+                   ? (value const *)this
+                   : value::bxor(rhs);
     }
 
-    inline value_type const *bor(value_type const *rhs) const noexcept
+    inline value const *bor(value const *rhs) const noexcept
     {
-        return rhs->as<int_>()
-                   ? (value_type const *)this
-                   : value_type::bor(rhs);
+        return rhs->as<int_value>()
+                   ? (value const *)this
+                   : value::bor(rhs);
     }
 };
 
-struct int_const final : int_
+struct sint_type final : type
 {
-    inline static int_const const *value(int64_t n) noexcept
+    // TODO: address the naming here
+    inline value const *top() const noexcept { return int_bot::self(); }
+};
+
+struct int_const final : int_value
+{
+    inline static int_const const *make(int64_t n) noexcept
     {
         // TODO: use something more optimal, remove caching once you get "in-place" types
         static entt::dense_map<int64_t, std::unique_ptr<int_const const>, std::identity> cache;
@@ -217,8 +223,8 @@ struct int_const final : int_
 
     inline bool is_const() const { return true; }
 
-    // impl value_type
-    inline value_type const *add(value_type const *rhs) const noexcept
+    // impl value
+    inline value const *add(value const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
             return rhs;
@@ -227,10 +233,10 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return this;
         else
-            return value_type::add(rhs);
+            return value::add(rhs);
     }
 
-    inline value_type const *sub(value_type const *rhs) const noexcept
+    inline value const *sub(value const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
             return rhs;
@@ -239,10 +245,10 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return this;
         else
-            return value_type::sub(rhs);
+            return value::sub(rhs);
     }
 
-    inline value_type const *mul(value_type const *rhs) const noexcept
+    inline value const *mul(value const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
             return rhs;
@@ -251,10 +257,10 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return this;
         else
-            return value_type::mul(rhs);
+            return value::mul(rhs);
     }
 
-    inline value_type const *div(value_type const *rhs) const noexcept
+    inline value const *div(value const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
             return rhs;
@@ -263,12 +269,12 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return this;
         else
-            return value_type::div(rhs);
+            return value::div(rhs);
     }
 
-    inline value_type const *neg() const noexcept { return new int_const{-n}; }
+    inline value const *neg() const noexcept { return new int_const{-n}; }
 
-    inline value_type const *eq(value_type const *rhs) const noexcept
+    inline value const *eq(value const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
             return bool_bot::self();
@@ -277,10 +283,10 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return bool_top::self();
         else
-            return value_type::eq(rhs);
+            return value::eq(rhs);
     }
 
-    inline value_type const *ne(value_type const *rhs) const noexcept
+    inline value const *ne(value const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
             return bool_bot::self();
@@ -289,10 +295,10 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return bool_top::self();
         else
-            return value_type::ne(rhs);
+            return value::ne(rhs);
     }
 
-    inline value_type const *lt(value_type const *rhs) const noexcept
+    inline value const *lt(value const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
             return bool_bot::self();
@@ -301,10 +307,10 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return bool_top::self();
         else
-            return value_type::lt(rhs);
+            return value::lt(rhs);
     }
 
-    inline value_type const *le(value_type const *rhs) const noexcept
+    inline value const *le(value const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
             return bool_bot::self();
@@ -313,10 +319,10 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return bool_top::self();
         else
-            return value_type::le(rhs);
+            return value::le(rhs);
     }
 
-    inline value_type const *gt(value_type const *rhs) const noexcept
+    inline value const *gt(value const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
             return bool_bot::self();
@@ -325,10 +331,10 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return bool_top::self();
         else
-            return value_type::gt(rhs);
+            return value::gt(rhs);
     }
 
-    inline value_type const *ge(value_type const *rhs) const noexcept
+    inline value const *ge(value const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
             return bool_bot::self();
@@ -337,10 +343,10 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return bool_top::self();
         else
-            return value_type::ge(rhs);
+            return value::ge(rhs);
     }
 
-    inline value_type const *band(value_type const *rhs) const noexcept
+    inline value const *band(value const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
             return rhs;
@@ -349,10 +355,10 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return this;
         else
-            return value_type::band(rhs);
+            return value::band(rhs);
     }
 
-    inline value_type const *bxor(value_type const *rhs) const noexcept
+    inline value const *bxor(value const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
             return rhs;
@@ -361,10 +367,10 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return this;
         else
-            return value_type::bxor(rhs);
+            return value::bxor(rhs);
     }
 
-    inline value_type const *bor(value_type const *rhs) const noexcept
+    inline value const *bor(value const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
             return rhs;
@@ -373,7 +379,7 @@ struct int_const final : int_
         else if (rhs->as<int_top>())
             return this;
         else
-            return value_type::bor(rhs);
+            return value::bor(rhs);
     }
 
     int64_t n;
@@ -384,7 +390,7 @@ private:
 
 // TODO: two or more possible ranges (eg. [-5, -3] to [3, 5])
 // TODO: lt, gt, le, ge
-struct int_range final : int_
+struct int_range final : int_value
 {
     inline int_range(int64_t lo = INT64_MIN, int64_t hi = INT64_MAX) noexcept
         : lo{lo}, hi{hi} {}

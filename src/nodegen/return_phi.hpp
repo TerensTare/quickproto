@@ -11,19 +11,19 @@ struct return_phi_node final
     entt::entity region;
     entt::entity lhs, rhs;
 
-    inline value_type const *infer(type_storage const &types) const;
-    inline entt::entity emit(builder &bld, value_type const *ty) const;
+    inline value const *infer(type_storage const &types) const;
+    inline entt::entity emit(builder &bld, value const *ty) const;
 };
 
 static_assert(nodegen<return_phi_node>);
 
-inline value_type const *return_phi_node::infer(type_storage const &types) const
+inline value const *return_phi_node::infer(type_storage const &types) const
 {
     // TODO: find a better type instead
     return bot_type::self();
 }
 
-inline entt::entity return_phi_node::emit(builder &bld, value_type const *ty) const
+inline entt::entity return_phi_node::emit(builder &bld, value const *ty) const
 {
     // TODO: handle case when either branch is null
     // TODO: handle multiple returns

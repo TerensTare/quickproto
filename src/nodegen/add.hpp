@@ -7,19 +7,19 @@ struct add_node final
 {
     entt::entity lhs, rhs;
 
-    inline value_type const *infer(type_storage const &types) const;
-    inline entt::entity emit(builder &bld, value_type const *ty) const;
+    inline value const *infer(type_storage const &types) const;
+    inline entt::entity emit(builder &bld, value const *ty) const;
 };
 
 static_assert(nodegen<add_node>);
 
-inline value_type const *add_node::infer(type_storage const &types) const
+inline value const *add_node::infer(type_storage const &types) const
 {
     return types.get(lhs).type->add(types.get(rhs).type);
 }
 
 // TODO: emit the correct `add` depending on the type
-inline entt::entity add_node::emit(builder &bld, value_type const *ty) const
+inline entt::entity add_node::emit(builder &bld, value const *ty) const
 {
     if (ty->is_const())
         return make(bld, value_node{ty});
@@ -28,12 +28,12 @@ inline entt::entity add_node::emit(builder &bld, value_type const *ty) const
     // TODO: only do this for integers/floats, not strings
     if (lhs == rhs)
     {
-        auto const two = make(bld, value_node{int_const::value(2)});
+        auto const two = make(bld, value_node{int_const::make(2)});
         return make(bld, mul_node{lhs, two});
     }
 
     entt::entity const ins[]{lhs, rhs};
     // TODO: more cases here
-    auto const op = ty->as<int_>() ? node_op::Add : node_op::Fadd;
+    auto const op = ty->as<int_value>() ? node_op::Add : node_op::Fadd;
     return bld.make(op, ins);
 }

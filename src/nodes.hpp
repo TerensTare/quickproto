@@ -39,7 +39,7 @@
 // TODO: specify `Out` links of each node (ie. can you link a ctrl, memory, data edge to this node?)
 
 // forward declaration
-struct value_type;
+struct value;
 
 // component
 enum class node_op : uint8_t
@@ -107,7 +107,7 @@ enum class node_op : uint8_t
 // HACK: use a non-polymorphic C++ type to represent node type
 struct node_type final
 {
-    value_type const *type = nullptr;
+    value const *type = nullptr;
 };
 
 struct users final
@@ -143,7 +143,7 @@ struct mem_effect final
     // TODO: you don't really need this here, it is deduced later by global code motion
     entt::entity prev;   // link to the operation before this one
     entt::entity target; // the node from which this node reads from/writes to
-    int_ const *offset;
+    int_value const *offset;
 };
 
 // component

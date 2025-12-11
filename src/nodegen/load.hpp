@@ -10,16 +10,16 @@
 struct load_node final
 {
     entt::entity base;
-    int_ const *offset = nullptr;
+    int_value const *offset = nullptr;
     // entt::entity offset = entt::null; // HACK: if null, simply return `base`
 
-    inline value_type const *infer(type_storage const &types) const;
-    inline entt::entity emit(builder &bld, value_type const *ty) const;
+    inline value const *infer(type_storage const &types) const;
+    inline entt::entity emit(builder &bld, value const *ty) const;
 };
 
 static_assert(nodegen<load_node>);
 
-inline value_type const *load_node::infer(type_storage const &types) const
+inline value const *load_node::infer(type_storage const &types) const
 {
     // // HACK: do not branch here
     // if (offset == nullptr)
@@ -29,7 +29,7 @@ inline value_type const *load_node::infer(type_storage const &types) const
     return types.get(base).type->index(offset);
 }
 
-inline entt::entity load_node::emit(builder &bld, value_type const *ty) const
+inline entt::entity load_node::emit(builder &bld, value const *ty) const
 {
     // HACK: do not branch here
     // if (offset == nullptr)

@@ -3,104 +3,104 @@
 
 #include "types/bool.hpp"
 
-struct float_ : value_type
+struct float_value : value
 {
     // TODO: recheck this
-    inline value_type const *assign(value_type const *rhs) const noexcept
+    inline value const *assign(value const *rhs) const noexcept
     {
-        return rhs->as<float_>()
+        return rhs->as<float_value>()
                    ? rhs
-                   : value_type::assign(rhs);
+                   : value::assign(rhs);
     }
 
     inline char const *name() const noexcept override { return "{float}"; }
 };
 
-struct float_top final : float_
+struct float_top final : float_value
 {
-    inline static value_type const *self() noexcept
+    inline static value const *self() noexcept
     {
         static float_top top;
         return &top;
     }
 
-    // impl value_type
+    // impl value
 
-    inline value_type const *add(value_type const *rhs) const noexcept
+    inline value const *add(value const *rhs) const noexcept
     {
-        return (rhs->as<float_>())
+        return (rhs->as<float_value>())
                    ? rhs
-                   : value_type::add(rhs);
+                   : value::add(rhs);
     }
 
-    inline value_type const *sub(value_type const *rhs) const noexcept
+    inline value const *sub(value const *rhs) const noexcept
     {
-        return (rhs->as<float_>())
+        return (rhs->as<float_value>())
                    ? rhs
-                   : value_type::sub(rhs);
+                   : value::sub(rhs);
     }
 
-    inline value_type const *mul(value_type const *rhs) const noexcept
+    inline value const *mul(value const *rhs) const noexcept
     {
-        return (rhs->as<float_>())
+        return (rhs->as<float_value>())
                    ? rhs
-                   : value_type::mul(rhs);
+                   : value::mul(rhs);
     }
 
-    inline value_type const *div(value_type const *rhs) const noexcept
+    inline value const *div(value const *rhs) const noexcept
     {
-        return (rhs->as<float_>())
+        return (rhs->as<float_value>())
                    ? rhs
-                   : value_type::div(rhs);
+                   : value::div(rhs);
     }
 
-    inline value_type const *neg() const noexcept { return this; }
+    inline value const *neg() const noexcept { return this; }
 
-    inline value_type const *eq(value_type const *rhs) const noexcept
+    inline value const *eq(value const *rhs) const noexcept
     {
-        return (rhs->as<float_>())
+        return (rhs->as<float_value>())
                    ? bool_top::self()
-                   : value_type::eq(rhs);
+                   : value::eq(rhs);
     }
 
-    inline value_type const *lt(value_type const *rhs) const noexcept
+    inline value const *lt(value const *rhs) const noexcept
     {
-        return (rhs->as<float_>())
+        return (rhs->as<float_value>())
                    ? bool_top::self()
-                   : value_type::lt(rhs);
+                   : value::lt(rhs);
     }
 };
 
-struct float_bot final : float_
+struct float_bot final : float_value
 {
-    inline static value_type const *self() noexcept
+    inline static value const *self() noexcept
     {
         static float_bot bot;
         return &bot;
     }
 
-    // impl value_type
+    // impl value
 
-    // TODO: fail if type is NOT `float_`
-    inline value_type const *add(value_type const *rhs) const noexcept { return this; }
-    inline value_type const *sub(value_type const *rhs) const noexcept { return this; }
-    inline value_type const *mul(value_type const *rhs) const noexcept { return this; }
-    inline value_type const *div(value_type const *rhs) const noexcept { return this; }
+    // TODO: fail if type is NOT `float_value`
+    inline value const *add(value const *rhs) const noexcept { return this; }
+    inline value const *sub(value const *rhs) const noexcept { return this; }
+    inline value const *mul(value const *rhs) const noexcept { return this; }
+    inline value const *div(value const *rhs) const noexcept { return this; }
 
-    inline value_type const *neg() const noexcept { return this; }
+    inline value const *neg() const noexcept { return this; }
 
-    inline value_type const *eq(value_type const *rhs) const noexcept { return this; }
-    inline value_type const *lt(value_type const *rhs) const noexcept { return this; }
+    inline value const *eq(value const *rhs) const noexcept { return this; }
+    inline value const *lt(value const *rhs) const noexcept { return this; }
 };
 
-struct float32 final : float_
+struct float32 final : float_value
 {
     explicit float32(float f) noexcept : f{f} {}
 
     inline bool is_const() const { return true; }
 
-    // impl value_type
-    inline value_type const *add(value_type const *rhs) const noexcept
+    // impl value
+    inline value const *add(value const *rhs) const noexcept
     {
         if (rhs->as<float_bot>())
             return rhs;
@@ -109,10 +109,10 @@ struct float32 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return value_type::add(rhs);
+            return value::add(rhs);
     }
 
-    inline value_type const *sub(value_type const *rhs) const noexcept
+    inline value const *sub(value const *rhs) const noexcept
     {
         if (rhs->as<float_bot>())
             return rhs;
@@ -121,10 +121,10 @@ struct float32 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return value_type::sub(rhs);
+            return value::sub(rhs);
     }
 
-    inline value_type const *mul(value_type const *rhs) const noexcept
+    inline value const *mul(value const *rhs) const noexcept
     {
         if (rhs->as<float_bot>())
             return rhs;
@@ -133,10 +133,10 @@ struct float32 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return value_type::mul(rhs);
+            return value::mul(rhs);
     }
 
-    inline value_type const *div(value_type const *rhs) const noexcept
+    inline value const *div(value const *rhs) const noexcept
     {
         if (rhs->as<float_bot>())
             return rhs;
@@ -145,12 +145,12 @@ struct float32 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return value_type::div(rhs);
+            return value::div(rhs);
     }
 
-    inline value_type const *neg() const noexcept { return new float32{-f}; }
+    inline value const *neg() const noexcept { return new float32{-f}; }
 
-    inline value_type const *eq(value_type const *rhs) const noexcept
+    inline value const *eq(value const *rhs) const noexcept
     {
         if (rhs->as<float_bot>())
             return bool_bot::self();
@@ -159,10 +159,10 @@ struct float32 final : float_
         else if (rhs->as<float_top>())
             return bool_top::self();
         else
-            return value_type::eq(rhs);
+            return value::eq(rhs);
     }
 
-    inline value_type const *lt(value_type const *rhs) const noexcept
+    inline value const *lt(value const *rhs) const noexcept
     {
         if (rhs->as<float_bot>())
             return bool_bot::self();
@@ -171,7 +171,7 @@ struct float32 final : float_
         else if (rhs->as<float_top>())
             return bool_top::self();
         else
-            return value_type::lt(rhs);
+            return value::lt(rhs);
     }
 
     inline char const *name() const noexcept final { return "float32"; }
@@ -179,14 +179,14 @@ struct float32 final : float_
     float f;
 };
 
-struct float64 final : float_
+struct float64 final : float_value
 {
     explicit float64(double d) noexcept : d{d} {}
 
     inline bool is_const() const { return true; }
 
-    // impl value_type
-    inline value_type const *add(value_type const *rhs) const noexcept
+    // impl value
+    inline value const *add(value const *rhs) const noexcept
     {
         if (rhs->as<float_bot>())
             return rhs;
@@ -195,10 +195,10 @@ struct float64 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return value_type::add(rhs);
+            return value::add(rhs);
     }
 
-    inline value_type const *sub(value_type const *rhs) const noexcept
+    inline value const *sub(value const *rhs) const noexcept
     {
         if (rhs->as<float_bot>())
             return rhs;
@@ -207,10 +207,10 @@ struct float64 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return value_type::sub(rhs);
+            return value::sub(rhs);
     }
 
-    inline value_type const *mul(value_type const *rhs) const noexcept
+    inline value const *mul(value const *rhs) const noexcept
     {
         if (rhs->as<float_bot>())
             return rhs;
@@ -219,10 +219,10 @@ struct float64 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return value_type::mul(rhs);
+            return value::mul(rhs);
     }
 
-    inline value_type const *div(value_type const *rhs) const noexcept
+    inline value const *div(value const *rhs) const noexcept
     {
         if (rhs->as<float_bot>())
             return rhs;
@@ -231,12 +231,12 @@ struct float64 final : float_
         else if (rhs->as<float_top>())
             return this;
         else
-            return value_type::div(rhs);
+            return value::div(rhs);
     }
 
-    inline value_type const *neg() const noexcept { return new float64{-d}; }
+    inline value const *neg() const noexcept { return new float64{-d}; }
 
-    inline value_type const *eq(value_type const *rhs) const noexcept
+    inline value const *eq(value const *rhs) const noexcept
     {
         if (rhs->as<float_bot>())
             return bool_bot::self();
@@ -245,10 +245,10 @@ struct float64 final : float_
         else if (rhs->as<float_top>())
             return bool_top::self();
         else
-            return value_type::eq(rhs);
+            return value::eq(rhs);
     }
 
-    inline value_type const *lt(value_type const *rhs) const noexcept
+    inline value const *lt(value const *rhs) const noexcept
     {
         if (rhs->as<float_bot>())
             return bool_bot::self();
@@ -257,10 +257,16 @@ struct float64 final : float_
         else if (rhs->as<float_top>())
             return bool_top::self();
         else
-            return value_type::lt(rhs);
+            return value::lt(rhs);
     }
 
     inline char const *name() const noexcept final { return "float64"; }
 
     double d;
+};
+
+struct float64_type final : type
+{
+    // TODO: address the naming here
+    inline value const *top() const noexcept { return float_bot::self(); }
 };

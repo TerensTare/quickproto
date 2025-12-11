@@ -17,13 +17,14 @@ struct bad_args_count final : value_error
     size_t expected, got;
 };
 
-struct func final : value_type
+// TODO: optimize the storage here
+struct func final : value
 {
-    inline func(bool is_extern, value_type const *ret, size_t n_params, std::unique_ptr<value_type const *[]> params) noexcept
+    inline func(bool is_extern, value const *ret, size_t n_params, std::unique_ptr<value const *[]> params) noexcept
         : is_extern{is_extern}, ret{ret}, n_params{n_params}, params(std::move(params)) {}
 
     // TODO: you can avoid the span here if you ensure out of this function that `args` is of the correct size
-    inline value_type const *call(std::span<value_type const *> args) const noexcept
+    inline value const *call(std::span<value const *> args) const noexcept
     {
         if (n_params != args.size())
             return new bad_args_count{n_params, args.size()};
@@ -38,7 +39,27 @@ struct func final : value_type
     inline char const *name() const noexcept final { return "func"; }
 
     bool is_extern = false;
-    value_type const *ret;
+    value const *ret;
     size_t n_params;
-    std::unique_ptr<value_type const *[]> params;
+    std::unique_ptr<value const *[]> params;
+};
+
+struct func_type final : type
+{
+    inline func_type(bool is_extern, type const *ret, size_t n_params, std::unique_ptr<type const *[]> params)
+        : is_extern{is_extern}, ret{ret}, n_params{n_params}, params(std::move(params)) {}
+
+    inline value const *top() const noexcept
+    {
+        auto args = std::make_unique<value const *[]>(n_params);
+        for (size_t i{}; i < n_params; ++i)
+            args[i] = params[i]->top();
+
+        return new func{is_extern, ret->top(), n_params, std::move(args)};
+    }
+
+    bool is_extern;
+    type const *ret;
+    size_t n_params;
+    std::unique_ptr<type const *[]> params;
 };

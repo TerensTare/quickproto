@@ -21,7 +21,7 @@
 // - make `StartNode` hold `$ctrl; params...` as input and use `$ctrl`, `params...` as normal
 // - `Store` should be `Store(memory, proj, value)`
 
-inline value_type const *type_by_op(node_op op) noexcept
+inline value const *type_by_op(node_op op) noexcept
 {
     switch (op)
     {

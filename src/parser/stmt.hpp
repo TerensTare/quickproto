@@ -115,7 +115,7 @@ inline entt::entity parser::post_op(entt::entity lhs) noexcept
 
     // auto const name = str.intern(id);
     // auto const lhs = env.get_var(name);
-    auto const rhs = make(bld, value_node{int_const::value(1)});
+    auto const rhs = make(bld, value_node{int_const::make(1)});
 
     auto const opnode = optok == token_kind::PlusPlus
                             ? make(bld, add_node{lhs, rhs})

@@ -56,11 +56,8 @@ inline entt::entity parser::call(entt::entity base) noexcept
 
     // codegen
 
-    auto const is_extern = bld.reg.get<node_type>(base).type->as<func>()->is_extern;
-
     // TODO: is this correct? (consider for example, a call is made inside an `If`)
     auto const call = make(bld, call_node{
-                                    .is_extern = is_extern,
                                     .func = base,
                                     .args = ins,
                                 });
@@ -86,7 +83,7 @@ inline entt::entity parser::index(entt::entity base) noexcept
     // TODO: error if node is not integer
     auto const node = make(bld, load_node{
                                     .base = base,
-                                    .offset = bld.reg.get<node_type>(i).type->as<int_>(),
+                                    .offset = bld.reg.get<node_type>(i).type->as<int_value>(),
                                 });
 
     // TODO: how do you make sure it happens before any possible store, but still optimize it out if only load?
@@ -106,7 +103,7 @@ inline entt::entity parser::member(entt::entity base) noexcept
     // codegen
 
     // HACK: handle this better
-    auto ty = bld.reg.get<node_type>(base).type->as<struct_type>();
+    auto ty = bld.reg.get<node_type>(base).type->as<struct_value>()->type;
     if (!ty)
         fail(dot, "Cannot access member of type!");
 
@@ -122,14 +119,14 @@ inline entt::entity parser::member(entt::entity base) noexcept
 
     // TODO: find a better way to represent `Load`s at known indices
     // TODO: `int_const` is int64 but `offset` is int32
-    auto const offset_node = make(bld, value_node{int_const::value(offset)});
+    auto const offset_node = make(bld, value_node{int_const::make(offset)});
 
     // TODO: is this correct? (consider mutability, generalizing `Load`, etc.)
     // TODO: calculate the offset of the member and pass it to the load nodes
     // TODO: error if the node is not integer
     auto const node = make(bld, load_node{
                                     .base = base,
-                                    .offset = bld.reg.get<node_type>(offset_node).type->as<int_>(),
+                                    .offset = bld.reg.get<node_type>(offset_node).type->as<int_value>(),
                                 });
 
     // TODO: how do you make sure it happens before any possible store, but still optimize it out if only load?
@@ -178,7 +175,7 @@ inline entt::entity parser::primary() noexcept
         uint64_t val{};
         std::from_chars(txt.data(), txt.data() + txt.size(), val);
         // HACK: figure out actual int size
-        return make(bld, value_node{int_const::value(val)});
+        return make(bld, value_node{int_const::make(val)});
     }
 
     case Decimal:
@@ -198,7 +195,7 @@ inline entt::entity parser::primary() noexcept
 
     // TODO: don't use integer type here anymore
     case KwNil:
-        return make(bld, value_node{int_const::value(0)});
+        return make(bld, value_node{int_const::make(0)});
 
     // post_expr( '(' expr ')' )
     case LeftParen:
@@ -345,7 +342,7 @@ inline entt::entity parser::binary_node(token_kind kind, entt::entity lhs, entt:
 
 inline entt::entity parser::type_expr_or_ident() noexcept
 {
-    value_type const *ty = nullptr;
+    ::type const *ty = nullptr;
 
     // HACK: do something better
     if (scan.peek.kind == token_kind::Ident)
@@ -354,7 +351,7 @@ inline entt::entity parser::type_expr_or_ident() noexcept
         auto const index = env.get_name(nametok.hash);
 
         if (is_type(index))
-            ty = env.type(index);
+            ty = env.get_type(index);
         else if (index != name_index::missing)
             return post_expr(env.values[(uint32_t)index]);
         // TODO: address this

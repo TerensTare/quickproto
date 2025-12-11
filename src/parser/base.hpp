@@ -17,7 +17,7 @@
 // - types and instances model; "operations" on types are type decorators, on instances are normal operators
 // - `then` should probably accept a `stacklist` for return instead; this solves the multi-return problem + marking return as `entt::null`
 // - have a typecheck phase right before codegen that fires out errors related to type checking
-// ^ then you remove all the errors from `value_type`, as they should be handled on this phase instead
+// ^ then you remove all the errors from `value`, as they should be handled on this phase instead
 // - inline loads from values at the same scope level (eg. loading globals in global scope or locals in local scope)
 // - define function names only after they are fully parsed
 // ^ in the meantime you can mark their call occurrences as `unresolved` and resolve later
@@ -28,7 +28,7 @@
 // ^ this is not optimal as `Type{}` also uses `}` and a `;` is a valid following
 // - (maybe) literals should have a special type that can implicitly downcast as long as it fits? (eg. 257 cannot fit in a `uint8`)
 // ^ or maybe you can check these stuff in `type::value` instead and return an error on failure?
-// ^ ie. `value_type::narrow(value_type const *sub) { if sub out of this return out-of-bounds-value; else return sub; }
+// ^ ie. `value::narrow(value const *sub) { if sub out of this return out-of-bounds-value; else return sub; }
 // - find a way to avoid needing trailing newline on files (expected Semicolon but got Eof)
 // - codegen a `Load`/`Store` for global variables, as these operations need to be "lazy"
 // ^ (maybe) it's best to codegen `Load`/`Store` for everything, then cut the nodes for local stuff?
@@ -267,7 +267,7 @@ private:
 
     // <ident> type
     // i is the index of the parameter in the function declaration (used by the Proj node emitted for the parameter)
-    inline value_type const *param_decl(int64_t i) noexcept;
+    inline ::type const *param_decl(int64_t i) noexcept;
 
     // expr,*,? term
     inline smallvec expr_list_term(token_kind term) noexcept;
@@ -280,13 +280,13 @@ private:
     // type
 
     // array_type | named_type
-    inline value_type const *type() noexcept;
+    inline ::type const *type() noexcept;
 
     // '[' <integer> ']' type
-    inline value_type const *array_type() noexcept;
+    inline ::type const *array_type() noexcept;
 
     // <ident>
-    inline value_type const *named_type() noexcept;
+    inline ::type const *named_type() noexcept;
 
     // other helpers
 
@@ -442,9 +442,11 @@ inline ::env parser::global_scope(scope *global) noexcept
     using namespace entt::literals;
 
     // types
-    e.new_type((hashed_name)(uint32_t)"int"_hs, int_bot::self());
-    e.new_type((hashed_name)(uint32_t)"bool"_hs, bool_bot::self());
-    e.new_type((hashed_name)(uint32_t)"float64"_hs, float_bot::self());
+
+    // TODO: use a singleton here for now
+    e.new_type((hashed_name)(uint32_t)"int"_hs, new sint_type{});
+    e.new_type((hashed_name)(uint32_t)"bool"_hs, new bool_type{});
+    e.new_type((hashed_name)(uint32_t)"float64"_hs, new float64_type{});
     // TODO: more built-in types
 
     return e;

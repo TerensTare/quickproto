@@ -10,7 +10,7 @@
 #include "base.hpp"
 #include "token.hpp"
 
-#include "types/value.hpp"
+#include "types/type.hpp"
 
 // NOTE:
 // - when you get a variable, you can get from parent scope; but when you set you only set on this scope
@@ -58,8 +58,8 @@ struct scope final
     }
 
     // TODO(maybe): move constant stuff to a separate part; they never get merged
-    // ^ never mind, just merge everything to one map, implement `value_type.assign` and let it handle everything
-    // ^ but in that case, how do you distinguish between struct types and struct instances? (types implement `value_type.construct`)
+    // ^ never mind, just merge everything to one map, implement `value.assign` and let it handle everything
+    // ^ but in that case, how do you distinguish between struct types and struct instances? (types implement `value.construct`)
 
     // (name -> index) mapping; if not MSB it's a value, if MSB it's a type
     entt::dense_map<hashed_name, name_index, token_hash> table;
@@ -71,7 +71,7 @@ struct env final
     // TODO: probably best to remove this from here
     inline auto get_name(hashed_name name) const noexcept { return top->get_name(name); }
 
-    inline auto type(name_index name) const noexcept
+    inline auto get_type(name_index name) const noexcept
     {
         return types[(uint32_t)name & ~(uint32_t)name_index::type_mask];
     }
@@ -95,7 +95,7 @@ struct env final
         values.push_back(id);
     }
 
-    inline void new_type(hashed_name name, value_type const *ty) noexcept
+    inline void new_type(hashed_name name, type const *ty) noexcept
     {
         auto iter = top->table.find(name);
         ensure(iter == top->table.end(), "Name redeclared in block!");
@@ -116,7 +116,7 @@ struct env final
     }
 
     // TODO: use a non-shrinking page_vector here
-    std::vector<value_type const *> types;
+    std::vector<type const *> types;
     std::vector<entt::entity> values; // (name -> (mem_state, type)) mapping
 
     scope *top;

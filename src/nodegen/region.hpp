@@ -13,19 +13,19 @@ struct region_node final
     entt::entity then_state;
     entt::entity else_state;
 
-    inline value_type const *infer(type_storage const &types) const;
-    inline entt::entity emit(builder &bld, value_type const *ty) const;
+    inline value const *infer(type_storage const &types) const;
+    inline entt::entity emit(builder &bld, value const *ty) const;
 };
 
 static_assert(nodegen<region_node>);
 
-inline value_type const *region_node::infer(type_storage const &types) const
+inline value const *region_node::infer(type_storage const &types) const
 {
     // TODO: find a better type instead
     return bot_type::self();
 }
 
-inline entt::entity region_node::emit(builder &bld, value_type const *ty) const
+inline entt::entity region_node::emit(builder &bld, value const *ty) const
 {
     // TODO: does this part belong here?
     // TODO: only add one region at the end; when the whole `if-else` tree is parsed

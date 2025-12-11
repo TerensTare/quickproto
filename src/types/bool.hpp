@@ -3,74 +3,74 @@
 
 #include "types/value.hpp"
 
-struct bool_ : value_type
+struct bool_value : value
 {
-    inline value_type const *assign(value_type const *rhs) const noexcept
+    inline value const *assign(value const *rhs) const noexcept
     {
-        return rhs->as<bool_>()
+        return rhs->as<bool_value>()
                    ? rhs
-                   : value_type::assign(rhs);
+                   : value::assign(rhs);
     }
 
     inline char const *name() const noexcept final { return "bool"; }
 };
 
-struct bool_top final : bool_
+struct bool_top final : bool_value
 {
-    inline static value_type const *self() noexcept
+    inline static value const *self() noexcept
     {
         static bool_top top;
         return &top;
     }
 
-    // impl value_type
+    // impl value
 
     // unary
-    inline value_type const *bnot(value_type const *rhs) const noexcept { return this; }
+    inline value const *bnot(value const *rhs) const noexcept { return this; }
 
     // comparators
-    inline value_type const *eq(value_type const *rhs) const noexcept
+    inline value const *eq(value const *rhs) const noexcept
     {
         // TODO: is this correct?
-        return (rhs->as<bool_>())
+        return (rhs->as<bool_value>())
                    ? rhs
-                   : value_type::eq(rhs);
+                   : value::eq(rhs);
     }
 
     // boolean logic
-    inline value_type const *logic_and(value_type const *rhs) const noexcept
+    inline value const *logic_and(value const *rhs) const noexcept
     {
         // TODO: is this correct?
-        return rhs->as<bool_>()
+        return rhs->as<bool_value>()
                    ? rhs
-                   : value_type::logic_and(rhs);
+                   : value::logic_and(rhs);
     }
 
-    inline value_type const *logic_or(value_type const *rhs) const noexcept
+    inline value const *logic_or(value const *rhs) const noexcept
     {
         // TODO: is this correct?
-        return rhs->as<bool_>()
+        return rhs->as<bool_value>()
                    ? rhs
-                   : value_type::logic_or(rhs);
+                   : value::logic_or(rhs);
     }
 };
 
-struct bool_const final : bool_
+struct bool_const final : bool_value
 {
     inline explicit bool_const(bool b) noexcept
         : b{b} {}
 
     inline bool is_const() const { return true; }
 
-    // impl value_type
+    // impl value
 
     // unary
-    inline value_type const *bnot() const noexcept { return new bool_const{!b}; }
+    inline value const *bnot() const noexcept { return new bool_const{!b}; }
 
     // comparators
-    inline value_type const *eq(value_type const *rhs) const noexcept
+    inline value const *eq(value const *rhs) const noexcept
     {
-        if (auto rbool = rhs->as<bool_>())
+        if (auto rbool = rhs->as<bool_value>())
         {
             // TODO: is this correct?
             if (auto r = rbool->as<bool_const>())
@@ -79,12 +79,12 @@ struct bool_const final : bool_
                 return r->eq(this);
         }
         else
-            return value_type::eq(rhs);
+            return value::eq(rhs);
     }
 
-    inline value_type const *logic_and(value_type const *rhs) const noexcept
+    inline value const *logic_and(value const *rhs) const noexcept
     {
-        if (auto rbool = rhs->as<bool_>())
+        if (auto rbool = rhs->as<bool_value>())
         {
             // TODO: is this correct?
             if (auto r = rbool->as<bool_const>())
@@ -92,12 +92,12 @@ struct bool_const final : bool_
             else
                 return r->eq(this);
         }
-        return value_type::logic_and(rhs);
+        return value::logic_and(rhs);
     }
 
-    inline value_type const *logic_or(value_type const *rhs) const noexcept
+    inline value const *logic_or(value const *rhs) const noexcept
     {
-        if (auto rbool = rhs->as<bool_>())
+        if (auto rbool = rhs->as<bool_value>())
         {
             // TODO: is this correct?
             if (auto r = rbool->as<bool_const>())
@@ -105,46 +105,52 @@ struct bool_const final : bool_
             else
                 return r->eq(this);
         }
-        return value_type::logic_or(rhs);
+        return value::logic_or(rhs);
     }
 
     bool b;
 };
 
-struct bool_bot final : bool_
+struct bool_bot final : bool_value
 {
-    inline static value_type const *self() noexcept
+    inline static value const *self() noexcept
     {
         static bool_bot bot;
         return &bot;
     }
 
-    // impl value_type
+    // impl value
 
     // logic
     // TODO: is this correct?
-    inline value_type const *logic_and(value_type const *rhs) const noexcept
+    inline value const *logic_and(value const *rhs) const noexcept
     {
-        return rhs->as<bool_>()
+        return rhs->as<bool_value>()
                    ? rhs
-                   : value_type::logic_and(rhs);
+                   : value::logic_and(rhs);
     }
 
-    inline value_type const *logic_or(value_type const *rhs) const noexcept
+    inline value const *logic_or(value const *rhs) const noexcept
     {
-        return rhs->as<bool_>()
+        return rhs->as<bool_value>()
                    ? rhs
-                   : value_type::logic_or(rhs);
+                   : value::logic_or(rhs);
     }
 
     // unary
-    inline value_type const *bnot(value_type const *rhs) const noexcept { return this; }
+    inline value const *bnot(value const *rhs) const noexcept { return this; }
 
     // comparators
-    inline value_type const *eq(value_type const *rhs) const noexcept
+    inline value const *eq(value const *rhs) const noexcept
     {
-        return rhs->as<bool_>()
-                   ? (value_type const *)this
-                   : value_type::eq(rhs);
+        return rhs->as<bool_value>()
+                   ? (value const *)this
+                   : value::eq(rhs);
     }
+};
+
+struct bool_type final : type
+{
+    // TODO: address the naming here
+    inline value const *top() const noexcept { return bool_bot::self(); }
 };

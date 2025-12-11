@@ -9,23 +9,23 @@
 struct store_node final
 {
     entt::entity lhs;
-    int_ const *offset = nullptr;
+    int_value const *offset = nullptr;
     entt::entity rhs;
 
-    inline value_type const *infer(type_storage const &types) const;
-    inline entt::entity emit(builder &bld, value_type const *ty) const;
+    inline value const *infer(type_storage const &types) const;
+    inline entt::entity emit(builder &bld, value const *ty) const;
 };
 
 static_assert(nodegen<store_node>);
 
-inline value_type const *store_node::infer(type_storage const &types) const
+inline value const *store_node::infer(type_storage const &types) const
 {
     // TODO: include the offset here
     // if (offset == entt::null)
     return types.get(lhs).type->assign(types.get(rhs).type);
 }
 
-inline entt::entity store_node::emit(builder &bld, value_type const *ty) const
+inline entt::entity store_node::emit(builder &bld, value const *ty) const
 {
     auto lhs = this->lhs;
     auto offset = this->offset;
@@ -33,7 +33,7 @@ inline entt::entity store_node::emit(builder &bld, value_type const *ty) const
 
     // HACK: fix this
     if (offset == nullptr)
-        offset = int_const::value(0);
+        offset = int_const::make(0);
 
     // TODO: move these optimizations out of here
     // auto dst_op = bld.reg.get<node_op const>(lhs);

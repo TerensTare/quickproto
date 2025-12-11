@@ -4,7 +4,7 @@
 #include "types/value.hpp"
 
 // TODO: implement
-struct ptr final : value_type
+struct ptr final : value
 {
 //     inline static ptr const *not_nil() noexcept
 //     {

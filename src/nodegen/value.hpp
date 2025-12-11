@@ -5,17 +5,17 @@
 
 struct value_node final
 {
-    value_type const *ty;
+    value const *ty;
 
-    inline value_type const *infer(type_storage const &) const;
-    inline entt::entity emit(builder &bld, value_type const *ty) const;
+    inline value const *infer(type_storage const &) const;
+    inline entt::entity emit(builder &bld, value const *ty) const;
 };
 
 static_assert(nodegen<value_node>);
 
-inline value_type const *value_node::infer(type_storage const &) const { return ty; }
+inline value const *value_node::infer(type_storage const &) const { return ty; }
 
-inline entt::entity value_node::emit(builder &bld, value_type const *ty) const
+inline entt::entity value_node::emit(builder &bld, value const *ty) const
 {
     // TODO: more cases here
     auto const kind = (ty->as<int_const>())

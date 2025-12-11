@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include "types/type.hpp"
+
 #include "types/bool.hpp"
 #include "types/const.hpp"
 #include "types/float.hpp"

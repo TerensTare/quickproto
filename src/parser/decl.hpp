@@ -64,7 +64,7 @@ inline void parser::inline_func_decl() noexcept
 
     // param_decl,*,?
     int64_t param_i = 0;
-    std::vector<value_type const *> param_types;
+    std::vector<::type const *> param_types;
 
     while (scan.peek.kind != token_kind::RightParen)
     {
@@ -78,15 +78,17 @@ inline void parser::inline_func_decl() noexcept
 
     eat(token_kind::RightParen); // ')'
 
-    auto param_types_list = std::make_unique_for_overwrite<value_type const *[]>((size_t)param_i);
+    auto param_types_list = std::make_unique_for_overwrite<::type const *[]>((size_t)param_i);
     std::copy_n(param_types.data(), param_i, param_types_list.get());
 
     // type?
     auto const ret_type = (scan.peek.kind != token_kind::LeftBrace)
                               ? type()
-                              : void_type::self();
+                              // TODO: use singleton
+                              : new void_type{};
 
-    bld.reg.get<node_type>(bld.state.mem).type = new func{false, ret_type, (size_t)param_i, std::move(param_types_list)};
+    // HACK: address this
+    bld.reg.get<node_type>(bld.state.mem).type = func_type{false, ret_type, (size_t)param_i, std::move(param_types_list)}.top();
 
     if (env.top->table.contains(nametok.hash))
         fail(nametok, "Function already defined");
@@ -170,7 +172,7 @@ inline void parser::extern_func_decl() noexcept
 
     // param_decl,*,?
     int64_t param_i = 0;
-    std::vector<value_type const *> param_types;
+    std::vector<::type const *> param_types;
 
     while (scan.peek.kind != token_kind::RightParen)
     {
@@ -184,17 +186,19 @@ inline void parser::extern_func_decl() noexcept
 
     eat(token_kind::RightParen); // ')'
 
-    auto param_types_list = std::make_unique_for_overwrite<value_type const *[]>((size_t)param_i);
+    auto param_types_list = std::make_unique_for_overwrite<::type const *[]>((size_t)param_i);
     std::copy_n(param_types.data(), param_i, param_types_list.get());
 
     // type?
     auto const ret_type = (scan.peek.kind != token_kind::Semicolon)
                               ? type()
-                              : void_type::self();
+                              // TODO: singleton
+                              : new void_type{};
 
     eat(token_kind::Semicolon); // ';'
 
-    bld.reg.get<node_type>(bld.state.mem).type = new func{true, ret_type, (size_t)param_i, std::move(param_types_list)};
+    // HACK: address this
+    bld.reg.get<node_type>(bld.state.mem).type = func_type{true, ret_type, (size_t)param_i, std::move(param_types_list)}.top();
 
     // TODO: drop the check either from here or from env
     if (env.top->table.contains(nametok.hash))
@@ -289,7 +293,7 @@ inline auto parser::alias_decl(token nametok) noexcept -> std::conditional_t<AsS
 template <bool AsStmt>
 inline auto parser::struct_decl(token nametok) noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>
 {
-    auto parse_members = [&](auto &&self, stacklist<member_info> *members, size_t n) -> value_type const *
+    auto parse_members = [&](auto &&self, stacklist<member_decl> *members, size_t n) -> ::type const *
     {
         switch (scan.peek.kind)
         {
@@ -297,7 +301,7 @@ inline auto parser::struct_decl(token nametok) noexcept -> std::conditional_t<As
         {
             scan.next(); // '}'
 
-            auto mem_ptr = new member_info[n];
+            auto mem_ptr = new member_decl[n];
             auto iter = members;
             for (size_t i{}; i < n; ++i)
             {
@@ -305,17 +309,17 @@ inline auto parser::struct_decl(token nametok) noexcept -> std::conditional_t<As
                 iter = iter->prev;
             }
 
-            return new struct_type{n, std::unique_ptr<member_info[]>(mem_ptr)};
+            return new struct_type{n, std::unique_ptr<member_decl[]>(mem_ptr)};
         }
 
         case token_kind::Ident:
         {
             auto const mem_name = scan.next(); // <ident>
-            auto const mem_ty = type();        // type
+            auto mem_ty = type();              // type
             eat(token_kind::Semicolon);        // ';'
 
             auto mem_node = stacklist{
-                .value = member_info{.name = mem_name.hash, .type = mem_ty},
+                .value = member_decl{.name = mem_name.hash, .ty = mem_ty},
                 .prev = members,
             };
             return self(self, &mem_node, n + 1);
@@ -388,7 +392,7 @@ inline void parser::package() noexcept
 
 // helper rules
 
-inline value_type const *parser::param_decl(int64_t i) noexcept
+inline ::type const *parser::param_decl(int64_t i) noexcept
 {
     // parsing
 
@@ -401,7 +405,7 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
     auto const node = bld.make(node_op::Proj, std::span(&bld.state.mem, 1));
     // TODO: figure out the exact type of this
     // TODO: is this correct now?
-    bld.reg.get<node_type>(node).type = ty;
+    bld.reg.get<node_type>(node).type = ty->top();
 
     // TODO: these params should be defined in the function's block, not on global env
     env.new_value(nametok.hash, node);
@@ -409,7 +413,7 @@ inline value_type const *parser::param_decl(int64_t i) noexcept
     return ty;
 }
 
-inline value_type const *parser::type() noexcept
+inline ::type const *parser::type() noexcept
 {
     // TODO: mark the type node if not declared yet
     // TODO: inline CPS this
@@ -427,7 +431,7 @@ inline value_type const *parser::type() noexcept
     }
 }
 
-inline value_type const *parser::array_type() noexcept
+inline ::type const *parser::array_type() noexcept
 {
     // TODO: allow deduced-size arrays for things like initializers and casts
 
@@ -445,7 +449,7 @@ inline value_type const *parser::array_type() noexcept
     return new ::array_type{base, n};
 }
 
-inline value_type const *parser::named_type() noexcept
+inline ::type const *parser::named_type() noexcept
 {
     // TODO: inline the check of `eat`
     auto const nametok = eat(token_kind::Ident); // type
@@ -455,7 +459,7 @@ inline value_type const *parser::named_type() noexcept
 
     // TODO: if the name is not declared yet, this still returns nullptr, is this correct?
     return (uint32_t(index) & uint32_t(name_index::type_mask))
-               ? env.type(index)
+               ? env.get_type(index)
                : nullptr;
 }
 
@@ -486,16 +490,14 @@ inline void parser::codegen_main() noexcept
     // TODO: should you pass `main_node` to the inputs of the function?
     entt::entity const main_ins[]{entt::null};
     auto const call_main = make(bld, call_node{
-                                         .is_extern = false,
                                          .func = main_node,
                                          .args = std::span(main_ins, 0),
                                      });
-    ensure(bld.reg.get<node_type>(call_main).type->as<void_type>(), "Function `main` cannot return a value!");
+    // HACK: check the type instead
+    ensure(bld.reg.get<node_type>(call_main).type->as<void_value>(), "Function `main` cannot return a value!");
 
     // TODO: is this correct?
-    auto const exit = make(bld, exit_node{
-                                    .code = 0,
-                                });
+    auto const exit = make(bld, exit_node{.code = 0});
     // TODO: DCE on unused functions
 
     bld.pop_vis(); // just for correctness

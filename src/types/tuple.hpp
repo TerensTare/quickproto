@@ -6,7 +6,7 @@
 
 #include "types/value.hpp"
 
-struct tuple : value_type
+struct tuple : value
 {
     // TODO: print concrete type instead
     inline char const *name() const noexcept final { return "tuple"; }
@@ -22,7 +22,7 @@ struct tuple_bot : tuple
 
 struct tuple_n : tuple
 {
-    inline tuple_n(size_t n, std::unique_ptr<value_type const *[]> sub) noexcept
+    inline tuple_n(size_t n, std::unique_ptr<value const *[]> sub) noexcept
         : n{n}, sub(std::move(sub)) {}
 
     // inline type const *meet(type const *rhs) const noexcept
@@ -34,7 +34,7 @@ struct tuple_n : tuple
     //     if (auto ptr = rhs->as<tuple_n>(); ptr && ptr->n == n)
     //     {
     //         // TODO: is this correct?
-    //         auto new_tuple = std::make_unique_for_overwrite<value_type const *[]>(n);
+    //         auto new_tuple = std::make_unique_for_overwrite<value const *[]>(n);
     //         for (size_t i{}; i < n; ++i)
     //         {
     //             new_tuple[i] = sub[i]->meet(ptr->sub[i]);
@@ -47,5 +47,5 @@ struct tuple_n : tuple
     // }
 
     size_t n;
-    std::unique_ptr<value_type const *[]> sub;
+    std::unique_ptr<value const *[]> sub;
 };

@@ -1,15 +1,24 @@
 
 #pragma once
 
-#include "value.hpp"
+#include "types/value.hpp"
 
-struct void_type final : value_type
+// TODO: void cannot be instantiated, so there is no top
+struct void_type final : type
 {
-    inline static value_type const *self() noexcept
+    // TODO: fix this
+    inline value const *top() const noexcept;
+};
+
+struct void_value final : value
+{
+    inline static value const *self() noexcept
     {
-        static void_type vty;
+        static void_value vty;
         return &vty;
     }
 
     inline char const *name() const noexcept { return "void"; }
 };
+
+inline value const *void_type::top() const noexcept { return void_value::self(); }
