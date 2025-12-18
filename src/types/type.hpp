@@ -18,6 +18,6 @@ struct type
     inline type const *as() const noexcept
     {
         static_assert(std::derived_from<T, decltype(auto(*this))>);
-        return dynamic_cast<T *>(this);
+        return dynamic_cast<T const *>(this);
     }
 };

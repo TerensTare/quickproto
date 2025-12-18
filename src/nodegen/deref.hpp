@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "nodegen/value.hpp"
+#include "nodegen/basic.hpp"
 
 // TODO: optimizations (deref addr, etc.)
 
@@ -23,10 +23,6 @@ inline value const *deref_node::infer(type_storage const &types) const
 
 inline entt::entity deref_node::emit(builder &bld, value const *val) const
 {
-    // TODO: recheck this
-    if (val->is_const())
-        return make(bld, value_node{val});
-
     entt::entity const ins[]{sub};
     return bld.make(val, node_op::Deref, ins);
 }

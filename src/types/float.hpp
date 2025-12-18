@@ -155,7 +155,7 @@ struct float32 final : float_value
         if (rhs->as<float_bot>())
             return bool_bot::self();
         else if (auto ptr = rhs->as<float32>(); ptr)
-            return new bool_const{f == ptr->f};
+            return bool_const::make(f == ptr->f);
         else if (rhs->as<float_top>())
             return bool_top::self();
         else
@@ -167,7 +167,7 @@ struct float32 final : float_value
         if (rhs->as<float_bot>())
             return bool_bot::self();
         else if (auto ptr = rhs->as<float32>(); ptr)
-            return new bool_const{f < ptr->f};
+            return bool_const::make(f < ptr->f);
         else if (rhs->as<float_top>())
             return bool_top::self();
         else
@@ -241,7 +241,7 @@ struct float64 final : float_value
         if (rhs->as<float_bot>())
             return bool_bot::self();
         else if (auto ptr = rhs->as<float64>(); ptr)
-            return new bool_const{d == ptr->d};
+            return bool_const::make(d == ptr->d);
         else if (rhs->as<float_top>())
             return bool_top::self();
         else
@@ -253,7 +253,7 @@ struct float64 final : float_value
         if (rhs->as<float_bot>())
             return bool_bot::self();
         else if (auto ptr = rhs->as<float64>(); ptr)
-            return new bool_const{d < ptr->d};
+            return bool_const::make(d < ptr->d);
         else if (rhs->as<float_top>())
             return bool_top::self();
         else

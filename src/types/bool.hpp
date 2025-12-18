@@ -57,9 +57,19 @@ struct bool_top final : bool_value
 
 struct bool_const final : bool_value
 {
-    // TODO: cache the true/false values
-    inline explicit bool_const(bool b) noexcept
-        : b{b} {}
+    inline static bool_const const *True() noexcept
+    {
+        static bool_const val{true};
+        return &val;
+    }
+
+    inline static bool_const const *False() noexcept
+    {
+        static bool_const val{false};
+        return &val;
+    }
+
+    inline static bool_const const *make(bool b) noexcept { return b ? True() : False(); }
 
     inline bool is_const() const { return true; }
 
@@ -110,6 +120,10 @@ struct bool_const final : bool_value
     }
 
     bool b;
+
+private:
+    inline explicit bool_const(bool b) noexcept
+        : b{b} {}
 };
 
 struct bool_bot final : bool_value

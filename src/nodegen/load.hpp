@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "nodegen/value.hpp"
+#include "nodegen/basic.hpp"
 
 // TODO:
 // - `offset` should never be `nullptr` anymore

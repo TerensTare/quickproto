@@ -6,6 +6,12 @@
 // TODO: implement other operators eventually
 struct nil_value final : value
 {
+    inline static nil_value const *self() noexcept
+    {
+        static nil_value nil;
+        return &nil;
+    }
+
     inline char const *name() const noexcept { return "nil"; }
 };
 

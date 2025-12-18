@@ -418,16 +418,15 @@ inline ::type const *parser::param_decl(int64_t i) noexcept
 
     // TODO: recheck this
     // TODO: figure out the exact type of this
-    auto const node = bld.make(ty->top(), node_op::Proj, std::span(&bld.state.mem, 1));
+    auto const node = bld.make(ty->top(), node_op::Proj);
     // TODO: recheck this
-    // TODO: this variable should be declared inside the function scope and increment the scope's counter
+    // TODO: this variable should increment the scope's counter
     bld.reg.emplace<mem_effect>(node) = {
         .target = bld.state.func,
         .tag = (uint32_t)i, // TODO: uniform integer type
     };
     bld.reg.emplace<mem_read>(node);
 
-    // TODO: these params should be defined in the function's block, not on global env
     env.new_value(nametok.hash, node);
 
     return ty;

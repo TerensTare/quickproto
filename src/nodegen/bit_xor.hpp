@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "nodegen/value.hpp"
+#include "nodegen/basic.hpp"
 
 struct bit_xor_node final
 {
@@ -21,9 +21,6 @@ inline value const *bit_xor_node::infer(type_storage const &types) const
 
 inline entt::entity bit_xor_node::emit(builder &bld, value const *val) const
 {
-    if (val->is_const())
-        return make(bld, value_node{val});
-
     entt::entity const ins[]{lhs, rhs};
     return bld.make(val, node_op::BitXor, ins);
 }

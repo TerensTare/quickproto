@@ -21,9 +21,6 @@ inline value const *add_node::infer(type_storage const &types) const
 // TODO: emit the correct `add` depending on the type
 inline entt::entity add_node::emit(builder &bld, value const *val) const
 {
-    if (val->is_const())
-        return make(bld, value_node{val});
-
     // a + a == a * 2
     // TODO: only do this for integers/floats, not strings
     if (lhs == rhs)

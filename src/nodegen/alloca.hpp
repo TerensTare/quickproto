@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "nodegen/value.hpp"
+#include "nodegen/basic.hpp"
 
 struct alloca_node final
 {

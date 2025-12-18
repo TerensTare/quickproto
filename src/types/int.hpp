@@ -3,7 +3,19 @@
 
 #include <cstdint>
 #include <entt/container/dense_map.hpp>
-#include "types/bool.hpp"
+
+#include "types/float.hpp"
+
+// HACK: do something better
+struct invalid_cast final : value_error
+{
+    inline invalid_cast(value const *val, type const *target) noexcept : val{val}, target{target} {}
+
+    inline char const *name() const noexcept { return "<invalid-cast>"; }
+
+    value const *val;
+    type const *target;
+};
 
 struct int_value : value
 {
@@ -229,7 +241,7 @@ struct int_const final : int_value
         if (rhs->as<int_bot>())
             return rhs;
         else if (auto ptr = rhs->as<int_const>(); ptr)
-            return new int_const{n + ptr->n};
+            return int_const::make(n + ptr->n);
         else if (rhs->as<int_top>())
             return this;
         else
@@ -241,7 +253,7 @@ struct int_const final : int_value
         if (rhs->as<int_bot>())
             return rhs;
         else if (auto ptr = rhs->as<int_const>(); ptr)
-            return new int_const{n - ptr->n};
+            return int_const::make(n - ptr->n);
         else if (rhs->as<int_top>())
             return this;
         else
@@ -253,7 +265,7 @@ struct int_const final : int_value
         if (rhs->as<int_bot>())
             return rhs;
         else if (auto ptr = rhs->as<int_const>(); ptr)
-            return new int_const{n * ptr->n};
+            return int_const::make(n * ptr->n);
         else if (rhs->as<int_top>())
             return this;
         else
@@ -265,21 +277,21 @@ struct int_const final : int_value
         if (rhs->as<int_bot>())
             return rhs;
         else if (auto ptr = rhs->as<int_const>(); ptr)
-            return (ptr->n == 0) ? int_top::self() : new int_const{n / ptr->n};
+            return (ptr->n == 0) ? int_top::self() : int_const::make(n / ptr->n);
         else if (rhs->as<int_top>())
             return this;
         else
             return value::div(rhs);
     }
 
-    inline value const *neg() const noexcept { return new int_const{-n}; }
+    inline value const *neg() const noexcept { return int_const::make(-n); }
 
     inline value const *eq(value const *rhs) const noexcept
     {
         if (rhs->as<int_bot>())
             return bool_bot::self();
         else if (auto ptr = rhs->as<int_const>(); ptr)
-            return new bool_const{n == ptr->n};
+            return bool_const::make(n == ptr->n);
         else if (rhs->as<int_top>())
             return bool_top::self();
         else
@@ -291,7 +303,7 @@ struct int_const final : int_value
         if (rhs->as<int_bot>())
             return bool_bot::self();
         else if (auto ptr = rhs->as<int_const>(); ptr)
-            return new bool_const{n != ptr->n};
+            return bool_const::make(n != ptr->n);
         else if (rhs->as<int_top>())
             return bool_top::self();
         else
@@ -303,7 +315,7 @@ struct int_const final : int_value
         if (rhs->as<int_bot>())
             return bool_bot::self();
         else if (auto ptr = rhs->as<int_const>(); ptr)
-            return new bool_const{n < ptr->n};
+            return bool_const::make(n < ptr->n);
         else if (rhs->as<int_top>())
             return bool_top::self();
         else
@@ -315,7 +327,7 @@ struct int_const final : int_value
         if (rhs->as<int_bot>())
             return bool_bot::self();
         else if (auto ptr = rhs->as<int_const>(); ptr)
-            return new bool_const{n <= ptr->n};
+            return bool_const::make(n <= ptr->n);
         else if (rhs->as<int_top>())
             return bool_top::self();
         else
@@ -327,7 +339,7 @@ struct int_const final : int_value
         if (rhs->as<int_bot>())
             return bool_bot::self();
         else if (auto ptr = rhs->as<int_const>(); ptr)
-            return new bool_const{n > ptr->n};
+            return bool_const::make(n > ptr->n);
         else if (rhs->as<int_top>())
             return bool_top::self();
         else
@@ -339,7 +351,7 @@ struct int_const final : int_value
         if (rhs->as<int_bot>())
             return bool_bot::self();
         else if (auto ptr = rhs->as<int_const>(); ptr)
-            return new bool_const{n >= ptr->n};
+            return bool_const::make(n >= ptr->n);
         else if (rhs->as<int_top>())
             return bool_top::self();
         else
@@ -351,7 +363,7 @@ struct int_const final : int_value
         if (rhs->as<int_bot>())
             return rhs;
         else if (auto ptr = rhs->as<int_const>(); ptr)
-            return new int_const{n & ptr->n};
+            return int_const::make(n & ptr->n);
         else if (rhs->as<int_top>())
             return this;
         else
@@ -363,7 +375,7 @@ struct int_const final : int_value
         if (rhs->as<int_bot>())
             return rhs;
         else if (auto ptr = rhs->as<int_const>(); ptr)
-            return new int_const{n ^ ptr->n};
+            return int_const::make(n ^ ptr->n);
         else if (rhs->as<int_top>())
             return this;
         else
@@ -375,11 +387,21 @@ struct int_const final : int_value
         if (rhs->as<int_bot>())
             return rhs;
         else if (auto ptr = rhs->as<int_const>(); ptr)
-            return new int_const{n | ptr->n};
+            return int_const::make(n | ptr->n);
         else if (rhs->as<int_top>())
             return this;
         else
             return value::bor(rhs);
+    }
+
+    inline value const *cast(type const *target) const noexcept
+    {
+        if (target->as<float64_type>())
+            return new float64{(double)n};
+        else if (target->as<sint_type>())
+            return this;
+        else
+            return new invalid_cast{this, target};
     }
 
     int64_t n;

@@ -40,6 +40,32 @@ struct type_error final
 
 static_assert(nodegen<type_error>);
 
+struct value_node final
+{
+    value const *val;
+
+    inline value const *infer(type_storage const &) const;
+    inline entt::entity emit(builder &bld, value const *val) const;
+};
+
+static_assert(nodegen<value_node>);
+
+inline value const *value_node::infer(type_storage const &) const { return val; }
+
+inline entt::entity value_node::emit(builder &bld, value const *val) const
+{
+    // TODO: more cases here
+    auto const kind = (val->as<int_const>())
+                          ? node_op::IConst
+                      : (val->as<float64>())
+                          ? node_op::FConst
+                          : node_op::BConst;
+
+    return bld.make(val, kind);
+}
+
+static_assert(nodegen<value_node>);
+
 template <nodegen Gen>
 [[nodiscard]]
 inline entt::entity make(builder &bld, Gen const &gen)
@@ -52,19 +78,15 @@ inline entt::entity make(builder &bld, Gen const &gen)
     if (auto err = val->as<value_error>())
         return make(bld, type_error{err});
 
-    // TODO: can const folding move here (check `val`) instead of being done per done?
+    if (val->is_const())
+        return value_node{val}.emit(bld, val); // NOTE: `make` is not used here to avoid the recursive call + type checks
 
+    // problem: the resulting node might be optimized and does not have the same effects as the original one; address that
     auto const n = gen.emit(bld, val);
     if constexpr (requires { typename Gen::ctrl_node; })
     {
         bld.reg.emplace<ctrl_effect>(n, bld.state.ctrl);
         bld.state.ctrl = n;
-    }
-
-    // problem: the resulting node might be optimized and does not have the same effects as the original one; address that
-    if constexpr (requires { typename Gen::mem_node; })
-    {
-        static_assert(false, "mem_node should be replaced by either mem_read or mem_write");
     }
 
     if constexpr (requires { typename Gen::mem_read; })

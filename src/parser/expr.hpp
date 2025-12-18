@@ -86,8 +86,6 @@ inline entt::entity parser::index(entt::entity base) noexcept
                                     .offset = bld.reg.get<node_type>(i).type->as<int_value>(),
                                 });
 
-    // TODO: how do you make sure it happens before any possible store, but still optimize it out if only load?
-
     // TODO: inline CPS this
     return post_expr(node); // post_expr(parsed)
 }
@@ -128,8 +126,6 @@ inline entt::entity parser::member(entt::entity base) noexcept
                                     .base = base,
                                     .offset = bld.reg.get<node_type>(offset_node).type->as<int_value>(),
                                 });
-
-    // TODO: how do you make sure it happens before any possible store, but still optimize it out if only load?
 
     // TODO: inline CPS this
     return post_expr(node); // post_expr(parsed)
@@ -192,13 +188,13 @@ inline entt::entity parser::primary() noexcept
     }
 
     case KwFalse:
-        return make(bld, value_node{new bool_const{false}});
+        return make(bld, value_node{bool_const::False()});
     case KwTrue:
-        return make(bld, value_node{new bool_const{true}});
+        return make(bld, value_node{bool_const::True()});
 
     // TODO: don't use integer type here anymore
     case KwNil:
-        return make(bld, value_node{int_const::make(0)});
+        return make(bld, value_node{nil_value::self()});
 
     // post_expr( '(' expr ')' )
     case LeftParen:

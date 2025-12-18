@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "nodegen/value.hpp"
+#include "nodegen/basic.hpp"
 
 struct le_node final
 {
@@ -17,16 +17,13 @@ static_assert(nodegen<le_node>);
 inline value const *le_node::infer(type_storage const &types) const
 {
     return (lhs == rhs)
-               ? new bool_const{true}
+               ? bool_const::True()
                : types.get(lhs).type->le(types.get(rhs).type);
 }
 
 // TODO: emit the correct `add` depending on the type
 inline entt::entity le_node::emit(builder &bld, value const *val) const
 {
-    if (val->is_const())
-        return make(bld, value_node{val});
-
     entt::entity const ins[]{lhs, rhs};
     return bld.make(val, node_op::CmpLe, ins);
 }

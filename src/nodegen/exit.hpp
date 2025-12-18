@@ -19,6 +19,7 @@ static_assert(nodegen<exit_node>);
 
 inline value const *exit_node::infer(type_storage const &types) const
 {
+    // TODO: use another value for the node, because it gets cut off from const folding
     return int_const::make(code);
 }
 

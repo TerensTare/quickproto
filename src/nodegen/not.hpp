@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "nodegen/value.hpp"
+#include "nodegen/basic.hpp"
 
 struct not_node final
 {
@@ -21,9 +21,6 @@ inline value const *not_node::infer(type_storage const &types) const
 
 inline entt::entity not_node::emit(builder &bld, value const *val) const
 {
-    if (val->is_const())
-        return make(bld, value_node{val});
-
     entt::entity const ins[]{sub};
     return bld.make(val, node_op::UnaryNot, ins);
 }

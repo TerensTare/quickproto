@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "nodegen/value.hpp"
+#include "nodegen/basic.hpp"
 
 // TODO:
 // - most things (Load, etc.) can happen in parallel with a Cast long as their do not take the cast as input; implement that
