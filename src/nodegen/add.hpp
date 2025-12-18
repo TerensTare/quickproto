@@ -8,7 +8,7 @@ struct add_node final
     entt::entity lhs, rhs;
 
     inline value const *infer(type_storage const &types) const;
-    inline entt::entity emit(builder &bld, value const *ty) const;
+    inline entt::entity emit(builder &bld, value const *val) const;
 };
 
 static_assert(nodegen<add_node>);
@@ -19,10 +19,10 @@ inline value const *add_node::infer(type_storage const &types) const
 }
 
 // TODO: emit the correct `add` depending on the type
-inline entt::entity add_node::emit(builder &bld, value const *ty) const
+inline entt::entity add_node::emit(builder &bld, value const *val) const
 {
-    if (ty->is_const())
-        return make(bld, value_node{ty});
+    if (val->is_const())
+        return make(bld, value_node{val});
 
     // a + a == a * 2
     // TODO: only do this for integers/floats, not strings
@@ -34,6 +34,7 @@ inline entt::entity add_node::emit(builder &bld, value const *ty) const
 
     entt::entity const ins[]{lhs, rhs};
     // TODO: more cases here
-    auto const op = ty->as<int_value>() ? node_op::Add : node_op::Fadd;
-    return bld.make(op, ins);
+    // TODO: use value type, not the hierarchy
+    auto const op = val->as<int_value>() ? node_op::Add : node_op::Fadd;
+    return bld.make(val, op, ins);
 }

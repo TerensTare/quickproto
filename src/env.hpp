@@ -17,6 +17,7 @@
 // - you only ever merge (Phi) variables of parent scopes; not types nor functions nor locals of this scope
 
 // TODO:
+// - remove alias class from here
 // - interned strings are sequential for now, so find a way to exploit it on scope storage
 // - have a push/pop mechanism for the arrays in `env`
 // - `get(var)` is always recursive but `set(var)` only affects the topmost environment
@@ -57,10 +58,7 @@ struct scope final
         return name_index::missing;
     }
 
-    // TODO(maybe): move constant stuff to a separate part; they never get merged
-    // ^ never mind, just merge everything to one map, implement `value.assign` and let it handle everything
-    // ^ but in that case, how do you distinguish between struct types and struct instances? (types implement `value.construct`)
-
+    // alias_class next_alias{.parent = parent_memory::Function, .tag = 0};
     // (name -> index) mapping; if not MSB it's a value, if MSB it's a type
     entt::dense_map<hashed_name, name_index, token_hash> table;
     scope *prev = nullptr;
@@ -85,6 +83,7 @@ struct env final
                    : entt::null;
     }
 
+    // TODO: how does this handle the heap case?
     inline void new_value(hashed_name name, entt::entity id) noexcept
     {
         auto iter = top->table.find(name);
@@ -93,6 +92,8 @@ struct env final
         auto const n = values.size();
         top->table.insert({name, name_index(n)});
         values.push_back(id);
+        // alias.push_back(top->next_alias);
+        // top->next_alias.tag++;
     }
 
     inline void new_type(hashed_name name, type const *ty) noexcept
@@ -116,8 +117,10 @@ struct env final
     }
 
     // TODO: use a non-shrinking page_vector here
+    // TODO: if using a page vector, you might as well use a page list instead and make it implicit (no reallocations, inline the `next` in the end of the array)
+    // TODO: you can still cut some values out from time to time (function scopes)
     std::vector<type const *> types;
-    std::vector<entt::entity> values; // (name -> (mem_state, type)) mapping
+    std::vector<entt::entity> values; // (name -> mem_state) mapping
 
     scope *top;
 };

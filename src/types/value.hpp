@@ -22,7 +22,6 @@
 // ^ then sized integers are for example: uint8 is `uint_range{0, 255}`
 // - maybe use a value_stack and index into it when representing types
 // - maybe handle operators using a function table, rather than letting the type handle them?
-// - rename `value` to `type`
 
 struct value
 {
@@ -33,7 +32,7 @@ struct value
         return dynamic_cast<T const *>(this);
     }
 
-    // HACK: do something better here
+    // HACK: do something better here (can you deduce it from the alias class?)
     virtual bool is_const() const { return false; }
 
     // TODO: recheck this
@@ -59,10 +58,15 @@ struct value
     virtual value const *bor(value const *rhs) const noexcept;
 
     // unary
-    // -lhs
+    // -self
     virtual value const *neg() const noexcept;
-    // !lhs
+    // !self
     virtual value const *bnot() const noexcept;
+    // *self
+    virtual value const *deref() const noexcept;
+    // &self
+    // TODO: by default this should not give an error
+    virtual value const *addr() const noexcept;
 
     // comparators
     // TODO: just return a `bool_value` here probably?
@@ -219,6 +223,8 @@ inline value const *value::div(value const *rhs) const noexcept
 
 inline value const *value::neg() const noexcept { return new unary_op_not_implemented_type{"-", this}; }
 inline value const *value::bnot() const noexcept { return new unary_op_not_implemented_type{"!", this}; }
+inline value const *value::deref() const noexcept { return new unary_op_not_implemented_type{"*", this}; }
+inline value const *value::addr() const noexcept { return new unary_op_not_implemented_type{"&", this}; }
 
 inline value const *value::eq(value const *rhs) const noexcept
 {

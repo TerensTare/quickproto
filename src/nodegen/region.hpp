@@ -14,7 +14,7 @@ struct region_node final
     entt::entity else_state;
 
     inline value const *infer(type_storage const &types) const;
-    inline entt::entity emit(builder &bld, value const *ty) const;
+    inline entt::entity emit(builder &bld, value const *val) const;
 };
 
 static_assert(nodegen<region_node>);
@@ -25,14 +25,14 @@ inline value const *region_node::infer(type_storage const &types) const
     return bot_type::self();
 }
 
-inline entt::entity region_node::emit(builder &bld, value const *ty) const
+inline entt::entity region_node::emit(builder &bld, value const *val) const
 {
     // TODO: does this part belong here?
     // TODO: only add one region at the end; when the whole `if-else` tree is parsed
     // ^ even if there is just an `if` branch, the `else` is implicit on both `Region` and `Phi`, you just need to figure out its value on both cases
     // ^ (maybe) this can be done by a pass instead?
     entt::entity const ins[]{then_state, else_state};
-    auto const ret = bld.make(node_op::Region, ins);
+    auto const ret = bld.make(val, node_op::Region, ins);
     bld.state.ctrl = ret;
     return ret;
     // TODO:

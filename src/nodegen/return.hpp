@@ -10,13 +10,13 @@
 struct return_node final
 {
     using ctrl_node = void;
-    using mem_node = void; // TODO: is this correct?
+    using mem_write = void; // TODO: is this correct?
 
     // TODO: try to see if you can instead pass an implicit list here
     std::span<entt::entity const> values;
 
     inline value const *infer(type_storage const &types) const;
-    inline entt::entity emit(builder &bld, value const *ty) const;
+    inline entt::entity emit(builder &bld, value const *val) const;
 };
 
 static_assert(nodegen<return_node>);
@@ -46,17 +46,15 @@ inline value const *return_node::infer(type_storage const &types) const
     return new tuple_n{n, std::move(tys)};
 }
 
-inline entt::entity return_node::emit(builder &bld, value const *ty) const
+inline entt::entity return_node::emit(builder &bld, value const *val) const
 {
     // HACK: only for now
     if (values[0] == entt::null)
     {
-        auto const ret = bld.make(node_op::Return);
-        bld.reg.get<node_type>(ret).type = ty; // TODO: is this correct?
-        return ret;
+        // TODO: is this correct?
+        return bld.make(val, node_op::Return);
     }
 
-    auto const ret = bld.make(node_op::Return, values);
-    bld.reg.get<node_type>(ret).type = ty; // TODO: is this correct?
-    return ret;
+    // TODO: is this correct?
+    return bld.make(val, node_op::Return, values);
 }

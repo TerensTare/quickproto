@@ -10,11 +10,11 @@
 // TODO: make this more descriptive
 struct variable_member_access final : value_error
 {
-    inline variable_member_access(value const *ty, value const *index) : ty{ty}, index{index} {}
+    inline variable_member_access(value const *val, value const *index) : val{val}, index{index} {}
 
     inline char const *name() const noexcept { return "<variable-member-access>"; }
 
-    value const *ty;
+    value const *val;
     value const *index;
 };
 

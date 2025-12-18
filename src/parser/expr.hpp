@@ -135,6 +135,7 @@ inline entt::entity parser::member(entt::entity base) noexcept
     return post_expr(node); // post_expr(parsed)
 }
 
+// TODO: recheck the rule to parse `&` and `*` rhs at correct precedence
 inline entt::entity parser::primary() noexcept
 {
     // TODO: CPS the `expr` calls here, repeat for `call`, `index` and `post_expr`, etc.
@@ -159,7 +160,9 @@ inline entt::entity parser::primary() noexcept
         KwNil,
         LeftParen, // (expr)
         Bang,
-        Minus, // unary
+        Minus,
+        And,
+        Star, // unary
     };
 
     auto const tok = eat(primary_tokens);
@@ -218,6 +221,20 @@ inline entt::entity parser::primary() noexcept
     {
         auto const sub = expr();
         return make(bld, neg_node{.sub = sub});
+    }
+
+    // '*' expr
+    case Star:
+    {
+        auto const sub = expr();
+        return make(bld, deref_node{.sub = sub});
+    }
+
+    // '&' expr
+    case And:
+    {
+        auto const sub = expr();
+        return make(bld, addr_node{.sub = sub});
     }
 
     default:

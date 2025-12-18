@@ -29,11 +29,10 @@ struct type_error final
 
     inline value const *infer(type_storage const &types) const { return err; }
 
-    inline entt::entity emit(builder &bld, value const *ty) const
+    inline entt::entity emit(builder &bld, value const *val) const
     {
         // TODO: figure out the exact type of this node
-        auto const n = bld.make(node_op::Error);
-        bld.reg.get<node_type>(n).type = ty;
+        auto const n = bld.make(val, node_op::Error);
         (void)bld.reg.emplace<error_node>(n);
         return n;
     }
@@ -49,22 +48,42 @@ inline entt::entity make(builder &bld, Gen const &gen)
     // TODO: the errors are still handled by `value`, maybe separate them from there
     // TODO: also keep location information, maybe as a `node_span` component
     // ^ the `node_span` of `make(children...)` is `join(first, last)`
-    auto ty = gen.infer(bld.reg.storage<node_type>());
-    if (auto err = ty->as<value_error>())
+    auto val = gen.infer(bld.reg.storage<node_type>());
+    if (auto err = val->as<value_error>())
         return make(bld, type_error{err});
 
-    auto const n = gen.emit(bld, ty);
+    // TODO: can const folding move here (check `val`) instead of being done per done?
+
+    auto const n = gen.emit(bld, val);
     if constexpr (requires { typename Gen::ctrl_node; })
     {
         bld.reg.emplace<ctrl_effect>(n, bld.state.ctrl);
         bld.state.ctrl = n;
     }
 
+    // problem: the resulting node might be optimized and does not have the same effects as the original one; address that
     if constexpr (requires { typename Gen::mem_node; })
     {
-        // TODO: separate mem_read/mem_write here
+        static_assert(false, "mem_node should be replaced by either mem_read or mem_write");
+    }
+
+    if constexpr (requires { typename Gen::mem_read; })
+    {
         // TODO: set the target here; for alloca/callstatic it is the function Start
-        bld.reg.emplace<mem_effect>(n) = {.prev = bld.state.mem, .target = bld.state.func};
+        // TODO: update this to reflect the changes
+        // TODO: set the tag
+        bld.reg.emplace<mem_effect>(n) = {.target = bld.state.func};
+        bld.reg.emplace<mem_read>(n);
+        bld.state.mem = n;
+    }
+
+    if constexpr (requires { typename Gen::mem_write; })
+    {
+        // TODO: set the target here; for alloca/callstatic it is the function Start
+        // TODO: update this to reflect the changes
+        // TODO: set the tag
+        bld.reg.emplace<mem_effect>(n) = {.target = bld.state.func};
+        bld.reg.emplace<mem_write>(n);
         bld.state.mem = n;
     }
 

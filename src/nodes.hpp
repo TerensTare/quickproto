@@ -5,10 +5,12 @@
 #include <vector>
 
 #include <entt/entity/entity.hpp>
+
 #include "types/int.hpp"
 #include "utils/smallvec.hpp"
 
 // TODO:
+// - projections should have names; the projection of a function is a parameter, the projections of program memory are heap, global, local (functions)
 // - `CallStatic` and `PureCallStatic`; the second one doesn't have an `effect` link
 // - `checked_index` by default, which can be lowered to `index` iff `index < len` is `true`
 // - optimization: Loads at an index with known type are just a `const` node
@@ -44,14 +46,18 @@ struct value;
 // component
 enum class node_op : uint8_t
 {
-    Load,      // Load In=[somePlace, indexNode; memState]
-    Store,     // Store In=[dstPlace, indexNode, srcPlace; memState]
-    MultiNode, // MultiNode Value=[n] In=array[node *; n]
-    Proj,      // Proj Value=[i] In=[multiNode]
-    Start,     // Start - a no-op node for preserving ordering between loads/stores and for representing side effects. Also indicates the beginning of a function
-    Alloca,    // Alloca - create a known-sized object of node's type in the stack
-    Return,    // Return Value=[n] In=[ctrl, returnNode x n]
-    Exit,      // Exit Value=[n]
+    Program, // Program - a no-op node for preserving ordering between loads/stores and for representing side effects. Indicates the beginning of a program + the program's memory (stack + heap)
+             // ^ this is the "local memory" node of a function (in terms of memory) + the "function start" in terms of control flow
+    // TODO: Package node
+    Global, // Global - like `Program` but at global level only (ie. this does not include local/heap allocations or local control flow)
+    Start,  // Start - like `Program` but for a function
+
+    Load,   // Load In=[somePlace, indexNode; memState]
+    Store,  // Store In=[dstPlace, indexNode, srcPlace; memState]
+    Proj,   // Proj Value=[i] In=[multiNode]
+    Alloca, // Alloca - create a known-sized object of node's type in the stack
+    Return, // Return Value=[n] In=[ctrl, returnNode x n]
+    Exit,   // Exit Value=[n]
 
     IfYes,  // IfYes In=[ctrlNode, condNode]
     IfNot,  // IfNot In=[ctrlNode, condNode]
@@ -96,7 +102,9 @@ enum class node_op : uint8_t
 
     Cast, // Cast In=[mem, expr] Type=[TargetType] Out=[mem, exprCastedToTargetType]
 
-    Addr,   // Addr Value=someRegister
+    Deref, // Deref Value=derefableExpr
+    Addr,  // Addr Value=addressableExpr
+
     IConst, // IConst Value=someInt
     FConst, // FConst Value=someFloat
     BConst, // BConst Value=someBool
@@ -138,12 +146,22 @@ struct ctrl_effect final
 
 // component
 // used for nodes that affect memory, such as stores
+/*
+    - ProgramMemory (only for executables?)
+        -> PackageMemory (Top)
+            -> HeapMemory (Heap)
+            -> StackMemory
+                -> StaticMemory (Global)
+                -> FunctionMemory (Start/Local)
+    ^ then when an executable is compiled, all `PackageMemory` is propagated to `ProgramMemory` for whole program optimizations
+*/
 struct mem_effect final
 {
-    // TODO: you don't really need this here, it is deduced later by global code motion
-    entt::entity prev;   // link to the operation before this one
+    entt::entity prev;
     entt::entity target; // the node from which this node reads from/writes to
-    int_value const *offset;
+    uint32_t tag;        // if -1, equivalent to `Top` (eg. accessing a runtime index of an array)
+    // ^ in all cases, `tag` should never be top but rather `parent` is propagated to the previous level (eg. `Top(Offset)` is `Local(x)`/`Global(x)`/`Heap(x)` depending on the parent)
+    // TODO: for structs, `tag` can probably just be the hash of the member, but then what is `Top`?
 };
 
 // component

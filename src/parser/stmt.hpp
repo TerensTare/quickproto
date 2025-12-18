@@ -169,10 +169,12 @@ inline entt::entity parser::if_stmt() noexcept
     eat(token_kind::KwIf);    // 'if'
     auto const cond = expr(); // expr
 
-    auto const if_yes_node = bld.make(node_op::IfYes, std::span(&cond, 1));
+    // TODO: recheck the type of this
+    auto const if_yes_node = bld.make(bot_type::self(), node_op::IfYes, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(if_yes_node, bld.state.ctrl);
 
-    auto const if_not_node = bld.make(node_op::IfNot, std::span(&cond, 1));
+    // TODO: recheck the type of this
+    auto const if_not_node = bld.make(bot_type::self(), node_op::IfNot, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(if_not_node, bld.state.ctrl);
 
     bld.state.ctrl = if_yes_node;
@@ -250,7 +252,8 @@ inline entt::entity parser::for_stmt() noexcept
 
     auto const loop = make(bld, loop_node{});
 
-    auto const if_yes_node = bld.make(node_op::IfYes, std::span(&cond, 1));
+    // TODO: recheck the type of this
+    auto const if_yes_node = bld.make(bot_type::self(), node_op::IfYes, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(if_yes_node, bld.state.ctrl);
     bld.state.ctrl = if_yes_node;
 
@@ -270,7 +273,8 @@ inline entt::entity parser::for_stmt() noexcept
                                });
 
     bld.state.ctrl = loop;
-    auto const rest_node = bld.make(node_op::IfNot, std::span(&cond, 1));
+    // TODO: recheck the type of this
+    auto const rest_node = bld.make(bot_type::self(), node_op::IfNot, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(rest_node, bld.state.ctrl);
     bld.state.ctrl = rest_node;
 
@@ -349,12 +353,18 @@ inline entt::entity parser::block(block_then then) noexcept
     // TODO: figure out merging with parent
     scope block_env{.prev = env.top};
     env.top = &block_env;
+    return block(noscope_t{}, then);
+}
 
+inline entt::entity parser::block(noscope_t, block_then then) noexcept
+{
+    // TODO: figure out merging with parent
     eat(token_kind::LeftBrace); // {
     auto ret = stmt();          // stmt*}
 
+    auto block_scope = env.top;
     env.top = env.top->prev;
-    return then(&block_env, ret);
+    return then(block_scope, ret);
 }
 
 inline entt::entity parser::simple_stmt() noexcept

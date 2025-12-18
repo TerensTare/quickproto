@@ -57,6 +57,7 @@ struct bool_top final : bool_value
 
 struct bool_const final : bool_value
 {
+    // TODO: cache the true/false values
     inline explicit bool_const(bool b) noexcept
         : b{b} {}
 

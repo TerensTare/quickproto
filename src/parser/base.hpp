@@ -12,12 +12,10 @@
 #include "utils/function_ref.hpp"
 
 // TODO:
+// - drop `Proj` nodes; instead keep track of each member's state and use `Load`/`Store` nodes
 // - generate `Store`s when creating an array
 // - enable multiple declarations and multiple assignments once you fully figure them out
-// - types and instances model; "operations" on types are type decorators, on instances are normal operators
 // - `then` should probably accept a `stacklist` for return instead; this solves the multi-return problem + marking return as `entt::null`
-// - have a typecheck phase right before codegen that fires out errors related to type checking
-// ^ then you remove all the errors from `value`, as they should be handled on this phase instead
 // - inline loads from values at the same scope level (eg. loading globals in global scope or locals in local scope)
 // - define function names only after they are fully parsed
 // ^ in the meantime you can mark their call occurrences as `unresolved` and resolve later
@@ -32,9 +30,6 @@
 // - find a way to avoid needing trailing newline on files (expected Semicolon but got Eof)
 // - codegen a `Load`/`Store` for global variables, as these operations need to be "lazy"
 // ^ (maybe) it's best to codegen `Load`/`Store` for everything, then cut the nodes for local stuff?
-// - do you need a `memory` edge for operations that affect memory state? (then `effect` becomes `happens_after`)
-// ^ (maybe) current `memory` and `ctrl` node should be on `builder`, not here? (they both start from `node::Start`)
-// - have lookup tables that map operator to node type, depending on operands (eg. `Iadd` or `Fadd` for `+`)
 // - (maybe) return expr type when parsing for cache friendliness?
 // - when encountering a return, you should probably set the memory state to the `return` node
 // - the returned values (on multi-return case) outlive the `then` call inside `block`, so you can just pass them as a span
@@ -135,7 +130,7 @@ struct parser final
     //           | <unary_op> expr
     //           | post_expr( '(' expr ')' )
     //           | post_expr( type_expr_or_ident )
-    // <unary_op> ::= '!' | '-'
+    // <unary_op> ::= '!' | '-' | '*' | '&'
     // ^ this means that the `post_expr` recursion will apply IFF <ident> is followed by `(`, `[` or `.`
     [[nodiscard]]
     inline entt::entity primary() noexcept;
@@ -191,6 +186,17 @@ struct parser final
     // ^ no `}` as that is handled by the `stmt` recursion
     [[nodiscard]]
     inline entt::entity block(block_then then) noexcept;
+
+    struct noscope_t final
+    {
+    };
+    // HACK: do something better
+    // used to handle function parsing without creating a lot of scopes
+    // '{' stmt
+    // ^ no `}` as that is handled by the `stmt` recursion
+    [[nodiscard]]
+    inline entt::entity block(noscope_t, block_then then) noexcept;
+
     // local_decl | assign | compound_assign | post_op
     // TODO: local_decl is disabled for now. Please use `var` syntax instead
     [[nodiscard]]
@@ -279,11 +285,14 @@ private:
 
     // type
 
-    // array_type | named_type
+    // array_type | pointer_type | named_type
     inline ::type const *type() noexcept;
 
     // '[' <integer> ']' type
     inline ::type const *array_type() noexcept;
+
+    // '*' type
+    inline ::type const *pointer_type() noexcept;
 
     // <ident>
     inline ::type const *named_type() noexcept;
@@ -356,10 +365,10 @@ inline entt::entity parser::phi(entt::entity old, entt::entity lhs, entt::entity
         return old;
 
     // TODO: specify the type of this node
-    auto const ret = bld.make(node_op::Phi, ins);
+    // HACK: generalize the value
+    auto const ret = bld.make(int_bot::self(), node_op::Phi, ins);
     (void)bld.reg.emplace<region_of_phi>(ret, old); // TODO: specify the actual region here and run passes
-    // HACK: generalize the type
-    bld.reg.get<node_type>(ret).type = int_bot::self();
+
     return ret;
 }
 
@@ -434,6 +443,7 @@ inline ::env parser::global_scope(scope *global) noexcept
 {
     // TODO: eventually this can be replaced for an implicit `import "builtin"`
 
+    // global->next_alias = {.parent = parent_memory::Global};
     ::env e{.top = global};
 
     // defs

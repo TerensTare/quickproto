@@ -57,6 +57,19 @@ inline void parser::inline_func_decl() noexcept
     auto nametok = eat(token_kind::Ident); // ident
     eat(token_kind::LeftParen);            // '('
 
+    if (env.top->table.contains(nametok.hash))
+        fail(nametok, "Function already defined");
+
+    // TODO: should the function point to the `Start`, `Return`, or where?
+    // ^ you can actually pre-define the `Return` node here, attach it to the env table, then set the node's inputs accordingly
+    // ^ this way you don't need to specially handle the case where a `return void` function does not have a `return` stmt
+    // TODO: should it be memory or ctrl? probably ctrl since after parsing it points to the `Return`
+    // TODO: ^ maybe all state nodes, rather than just one
+    env.new_value(nametok.hash, bld.state.mem);
+
+    scope s{.prev = env.top};
+    env.top = &s;
+
     // TODO: environment pointer should be restored to before parameters, not after
     // ^ also declare the function name before params; the environment should contain it
     // ^ or rather just mark it as unresolved and resolve it later
@@ -88,21 +101,11 @@ inline void parser::inline_func_decl() noexcept
                               : new void_type{};
 
     // HACK: address this
-    bld.reg.get<node_type>(bld.state.mem).type = func_type{false, ret_type, (size_t)param_i, std::move(param_types_list)}.top();
-
-    if (env.top->table.contains(nametok.hash))
-        fail(nametok, "Function already defined");
-
-    // TODO: should the function point to the `Start`, `Return`, or where?
-    // ^ you can actually pre-define the `Return` node here, attach it to the env table, then set the node's inputs accordingly
-    // ^ this way you don't need to specially handle the case where a `return void` function does not have a `return` stmt
-    // TODO: should it be memory or ctrl? probably ctrl since after parsing it points to the `Return`
-    // TODO: ^ maybe all state nodes, rather than just one
-    env.new_value(nametok.hash, bld.state.mem);
+    bld.reg.get<node_type>(bld.state.func).type = func_type{false, ret_type, (size_t)param_i, std::move(param_types_list)}.top();
 
     // TODO: typecheck that the return type matches what's expected
     // TODO: is this actually the `Return` node?
-    auto const ret = block([&](scope const *func_env, entt::entity ret)
+    auto const ret = block(noscope_t{}, [&](scope const *func_env, entt::entity ret)
                            {
                                eat(token_kind::Semicolon); // ;
 
@@ -165,6 +168,9 @@ inline void parser::extern_func_decl() noexcept
     auto nametok = eat(token_kind::Ident); // ident
     eat(token_kind::LeftParen);            // '('
 
+    scope s{.prev = env.top};
+    env.top = &s;
+
     // TODO: environment pointer should be restored to before parameters, not after
     // ^ also declare the function name before params; the environment should contain it
     // ^ or rather just mark it as unresolved and resolve it later
@@ -196,6 +202,8 @@ inline void parser::extern_func_decl() noexcept
                               : new void_type{};
 
     eat(token_kind::Semicolon); // ';'
+
+    env.top = env.top->prev;
 
     // HACK: address this
     bld.reg.get<node_type>(bld.state.mem).type = func_type{true, ret_type, (size_t)param_i, std::move(param_types_list)}.top();
@@ -385,6 +393,13 @@ inline void parser::package() noexcept
     scope_visibility vis;
     bld.push_vis<visibility::global>(vis);
 
+    // TODO: correctly represent this
+    // TODO: recheck the node's value
+    bld.pkg_mem = bld.make(bot_type::self(), node_op::Program);
+    bld.glob_mem = bld.make(bot_type::self(), node_op::Global);
+    bld.reg.emplace<mem_effect>(bld.glob_mem);
+    // TODO: read/write tag
+
     (void)bld.new_func();
 
     decl(); // decl*
@@ -402,10 +417,15 @@ inline ::type const *parser::param_decl(int64_t i) noexcept
     // codegen
 
     // TODO: recheck this
-    auto const node = bld.make(node_op::Proj, std::span(&bld.state.mem, 1));
     // TODO: figure out the exact type of this
-    // TODO: is this correct now?
-    bld.reg.get<node_type>(node).type = ty->top();
+    auto const node = bld.make(ty->top(), node_op::Proj, std::span(&bld.state.mem, 1));
+    // TODO: recheck this
+    // TODO: this variable should be declared inside the function scope and increment the scope's counter
+    bld.reg.emplace<mem_effect>(node) = {
+        .target = bld.state.func,
+        .tag = (uint32_t)i, // TODO: uniform integer type
+    };
+    bld.reg.emplace<mem_read>(node);
 
     // TODO: these params should be defined in the function's block, not on global env
     env.new_value(nametok.hash, node);
@@ -421,6 +441,9 @@ inline ::type const *parser::type() noexcept
     {
     case token_kind::LeftBracket:
         return array_type();
+
+    case token_kind::Star:
+        return pointer_type();
 
     case token_kind::Ident:
         return named_type();
@@ -447,6 +470,14 @@ inline ::type const *parser::array_type() noexcept
 
     auto base = type(); // TODO: you can CPS this and pass a `then` call that is propagated up to `named_type`
     return new ::array_type{base, n};
+}
+
+inline ::type const *parser::pointer_type() noexcept
+{
+    eat(token_kind::Star); // '*'
+    auto sub = type();     // type
+
+    return new ::pointer_type{sub};
 }
 
 inline ::type const *parser::named_type() noexcept
@@ -482,10 +513,10 @@ inline void parser::codegen_main() noexcept
     // TODO: most of these checks should be made by `call_static`
     // TODO: do something better for lookup here
     auto const main_iter = env.top->table.find((hashed_name)(uint32_t)"main"_hs);
-    ensure(main_iter != env.top->table.end(), "Program does not define a main function!");
+    ensure(main_iter != env.top->table.end(), "Program does not define a `main` function!");
     auto const main_node = env.values[(uint32_t)main_iter->second];
     auto const main_ty = bld.reg.get<node_type const>(main_node).type;
-    ensure(main_ty->as<func>(), "Program does not define a main function!");
+    ensure(main_ty->as<func>(), "`main` should be a function!");
 
     // TODO: should you pass `main_node` to the inputs of the function?
     entt::entity const main_ins[]{entt::null};

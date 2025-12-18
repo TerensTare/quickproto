@@ -9,7 +9,7 @@ struct ge_node final
     entt::entity lhs, rhs;
 
     inline value const *infer(type_storage const &types) const;
-    inline entt::entity emit(builder &bld, value const *ty) const;
+    inline entt::entity emit(builder &bld, value const *val) const;
 };
 
 static_assert(nodegen<ge_node>);
@@ -22,11 +22,11 @@ inline value const *ge_node::infer(type_storage const &types) const
 }
 
 // TODO: emit the correct `add` depending on the type
-inline entt::entity ge_node::emit(builder &bld, value const *ty) const
+inline entt::entity ge_node::emit(builder &bld, value const *val) const
 {
-    if (ty->is_const())
-        return make(bld, value_node{ty});
+    if (val->is_const())
+        return make(bld, value_node{val});
 
     entt::entity const ins[]{lhs, rhs};
-    return bld.make(node_op::CmpGe, ins);
+    return bld.make(val, node_op::CmpGe, ins);
 }

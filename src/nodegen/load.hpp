@@ -14,38 +14,27 @@ struct load_node final
     // entt::entity offset = entt::null; // HACK: if null, simply return `base`
 
     inline value const *infer(type_storage const &types) const;
-    inline entt::entity emit(builder &bld, value const *ty) const;
+    inline entt::entity emit(builder &bld, value const *val) const;
 };
 
 static_assert(nodegen<load_node>);
 
 inline value const *load_node::infer(type_storage const &types) const
 {
-    // // HACK: do not branch here
-    // if (offset == nullptr)
-    //     return types.get(base).type;
     // TODO: fail if `offset` is negative
     // TODO: probably best to have `Load` and `LoadN`
     return types.get(base).type->index(offset);
 }
 
-inline entt::entity load_node::emit(builder &bld, value const *ty) const
+inline entt::entity load_node::emit(builder &bld, value const *val) const
 {
-    // HACK: do not branch here
-    // if (offset == nullptr)
-    //     return base;
+    // TODO: is the value correct?
+    auto const load = bld.make(val, node_op::Load);
 
-    auto const load = bld.make(node_op::Load);
-
-    // TODO: is this correct?
-    bld.reg.get<node_type>(load).type = ty;
-
-    entt::entity target = bld.state.mem;
-
+    // TODO: tag=-1 should not be Top, instead it should propagate up
     bld.reg.emplace<mem_effect>(load) = {
-        .prev = bld.state.mem,
         .target = base,
-        .offset = offset,
+        .tag = offset->as<int_const>() ? (uint32_t)offset->as<int_const>()->n : ~uint32_t{},
     };
     bld.reg.emplace<mem_read>(load);
     bld.state.mem = load;

@@ -14,7 +14,7 @@ struct cast_node final
     entt::entity base;
 
     inline value const *infer(type_storage const &types) const;
-    inline entt::entity emit(builder &bld, value const *ty) const;
+    inline entt::entity emit(builder &bld, value const *val) const;
 };
 
 static_assert(nodegen<cast_node>);
@@ -24,10 +24,8 @@ inline value const *cast_node::infer(type_storage const &types) const
     return types.get(base).type->cast(target);
 }
 
-inline entt::entity cast_node::emit(builder &bld, value const *ty) const
+inline entt::entity cast_node::emit(builder &bld, value const *val) const
 {
     // TODO: implement this correctly
-    auto node = bld.make(node_op::Cast, std::span(&base, 1));
-    bld.reg.get<node_type>(node).type = ty;
-    return node;
+    return bld.make(val, node_op::Cast, std::span(&base, 1));
 }

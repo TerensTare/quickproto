@@ -21,42 +21,6 @@
 // - make `StartNode` hold `$ctrl; params...` as input and use `$ctrl`, `params...` as normal
 // - `Store` should be `Store(memory, proj, value)`
 
-inline value const *type_by_op(node_op op) noexcept
-{
-    switch (op)
-    {
-    case node_op::Add:
-    case node_op::Sub:
-    case node_op::Mul:
-    case node_op::Div:
-    case node_op::UnaryNeg:
-        return int_bot::self();
-
-    case node_op::Fadd:
-    case node_op::Fsub:
-    case node_op::Fmul:
-    case node_op::Fdiv:
-        return float_bot::self();
-
-    case node_op::CmpEq:
-    case node_op::CmpGe:
-    case node_op::CmpGt:
-    case node_op::CmpLe:
-    case node_op::CmpLt:
-    case node_op::CmpNe:
-        return bool_bot::self();
-
-    case node_op::IfYes:
-    case node_op::IfNot:
-    case node_op::Region:
-        // TODO: figure this out
-
-        // HACK: figure each node out instead
-    default:
-        return bot_type::self();
-    }
-}
-
 using tag_storage = std::remove_cvref_t<decltype(std::declval<entt::registry>().storage<void>())>;
 
 // TODO: ensure `push` only lowers visibility and `pop` only increases with debug checks
@@ -80,7 +44,7 @@ struct scope_visibility final
 
 struct builder final
 {
-    builder()
+    inline builder()
         : global{
               // TODO: is this correct?
               .name = visibility::maybe_reachable,
@@ -94,12 +58,12 @@ struct builder final
     // `node_type`
     // `node_inputs`
     // invariant: `users` is updated for any entity in `nins`
-    inline entt::entity make(node_op op, std::span<entt::entity const> nins) noexcept;
+    inline entt::entity make(value const *val, node_op op, std::span<entt::entity const> nins) noexcept;
 
-    inline entt::entity make(node_op op) noexcept
+    inline entt::entity make(value const *val, node_op op) noexcept
     {
         entt::entity dummy[1];
-        return make(op, std::span(dummy, 0));
+        return make(val, op, std::span(dummy, 0));
     }
 
     // TODO: debug_ensure that the given visibility is below current level
@@ -137,23 +101,37 @@ struct builder final
     {
         auto const old = state;
 
-        auto const ns = make(node_op::Start);
+        // TODO: recheck this
+        auto const ns = make(bot_type::self(), node_op::Start);
+        reg.emplace<mem_effect>(ns) = {
+            .target = glob_mem,
+            // TODO: figure out the tag here from the scope or somewhere
+            .tag = 0,
+        };
+        // TODO: add read/write tag
+
         state.func = ns;
         state.ctrl = ns;
         state.mem = ns;
         return old;
     }
 
+    // HACK: do something better here
+    inline entt::entity lookup(node_op op, std::span<entt::entity const> ins) const noexcept;
+
+    entt::entity pkg_mem;  // general package memory
+    entt::entity glob_mem; // global memory (not heap)
     func_state state;
 };
 
-inline entt::entity builder::make(node_op op, std::span<entt::entity const> nins) noexcept
+// TODO: specify the type here
+inline entt::entity builder::make(value const *val, node_op op, std::span<entt::entity const> nins) noexcept
 {
     auto const num_ins = nins.size();
 
     auto const n = reg.create();
     reg.emplace<node_op>(n, op);
-    reg.emplace<node_type>(n, type_by_op(op));
+    reg.emplace<node_type>(n, val);
     reg.emplace<node_inputs>(n, compress(nins));
     scopes->pool->emplace(n);
 

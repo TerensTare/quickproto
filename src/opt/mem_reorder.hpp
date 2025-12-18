@@ -22,8 +22,8 @@ inline void memory_reorder(builder &bld) noexcept
             auto &&prev = mem_chain.get(earliest_dep);
 
             if (writes.contains(earliest_dep) &&
-                // TODO: correctly check for offset equality
-                ((mem.target != prev.target) || mem.offset != prev.offset))
+                // TODO: correctly check for offset equality (include -1 check)
+                ((mem.target != prev.target) || (mem.tag != prev.tag)))
             {
                 // Reads/writes can happen in parallel with writes as long as they target different places or offsets
                 earliest_dep = prev.prev;

@@ -5,27 +5,26 @@
 
 struct value_node final
 {
-    value const *ty;
+    value const *val;
 
     inline value const *infer(type_storage const &) const;
-    inline entt::entity emit(builder &bld, value const *ty) const;
+    inline entt::entity emit(builder &bld, value const *val) const;
 };
 
 static_assert(nodegen<value_node>);
 
-inline value const *value_node::infer(type_storage const &) const { return ty; }
+inline value const *value_node::infer(type_storage const &) const { return val; }
 
-inline entt::entity value_node::emit(builder &bld, value const *ty) const
+inline entt::entity value_node::emit(builder &bld, value const *val) const
 {
     // TODO: more cases here
-    auto const kind = (ty->as<int_const>())
+    auto const kind = (val->as<int_const>())
                           ? node_op::IConst
-                      : (ty->as<float64>())
+                      : (val->as<float64>())
                           ? node_op::FConst
                           : node_op::BConst;
 
-    auto const n = bld.make(kind);
-    bld.reg.get<node_type>(n).type = ty;
+    auto const n = bld.make(val, kind);
 
     return n;
 }

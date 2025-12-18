@@ -39,6 +39,9 @@
 #include "nodegen/load.hpp"
 #include "nodegen/store.hpp"
 
+#include "nodegen/addr.hpp"
+#include "nodegen/deref.hpp"
+
 // other
 #include "nodegen/call.hpp"
 #include "nodegen/value.hpp"
