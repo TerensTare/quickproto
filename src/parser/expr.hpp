@@ -28,7 +28,7 @@ static constexpr auto prec_table = []()
     return table;
 }();
 
-inline entt::entity parser::post_expr(entt::entity base) noexcept
+inline expr_info parser::post_expr(expr_info base) noexcept
 {
     switch (scan.peek.kind)
     {
@@ -46,7 +46,7 @@ inline entt::entity parser::post_expr(entt::entity base) noexcept
     }
 }
 
-inline entt::entity parser::call(entt::entity base) noexcept
+inline expr_info parser::call(expr_info base) noexcept
 {
     // parsing
 
@@ -58,23 +58,26 @@ inline entt::entity parser::call(entt::entity base) noexcept
 
     // TODO: is this correct? (consider for example, a call is made inside an `If`)
     auto const call = make(bld, call_node{
-                                    .func = base,
+                                    .func = base.node,
                                     .args = ins,
                                 });
     // TODO: the call should probably modify just the memory node, not the control flow node
     // TODO: the call should probably link to the `Return` node of the called function, not the `Start`
 
     // TODO: inline CPS this
-    return post_expr(call); // post_expr(parsed)
+    return post_expr({
+        .node = call,
+        .assign = assign_index::none,
+    }); // post_expr(parsed)
 }
 
-inline entt::entity parser::index(entt::entity base) noexcept
+inline expr_info parser::index(expr_info base) noexcept
 {
     // parsing
 
     scan.next(); // '['
     // TODO: add `base` to the parameters list or maybe as a special node
-    auto const i = expr();         // expr
+    auto const i = expr().node;    // expr
     eat(token_kind::RightBracket); // ']'
 
     // codegen
@@ -82,15 +85,18 @@ inline entt::entity parser::index(entt::entity base) noexcept
     // TODO: is this correct? (consider mutability, generalizing `Load`, etc.)
     // TODO: error if node is not integer
     auto const node = make(bld, load_node{
-                                    .base = base,
+                                    .base = base.node,
                                     .offset = bld.reg.get<node_type>(i).type->as<int_value>(),
                                 });
 
     // TODO: inline CPS this
-    return post_expr(node); // post_expr(parsed)
+    return post_expr({
+        .node = node,
+        .assign = base.assign,
+    }); // post_expr(parsed)
 }
 
-inline entt::entity parser::member(entt::entity base) noexcept
+inline expr_info parser::member(expr_info base) noexcept
 {
     // parsing
 
@@ -101,9 +107,12 @@ inline entt::entity parser::member(entt::entity base) noexcept
     // codegen
 
     // HACK: handle this better
-    auto ty = bld.reg.get<node_type>(base).type->as<struct_value>()->type;
-    if (!ty)
+    auto rawval = bld.reg.get<node_type>(base.node).type;
+    auto baseval = rawval->as<struct_value>();
+    if (!baseval)
         fail(dot, "Cannot access member of type!");
+
+    auto ty = baseval->type;
 
     int32_t offset = -1;
     for (size_t i{}; i < ty->n_members; ++i)
@@ -123,16 +132,19 @@ inline entt::entity parser::member(entt::entity base) noexcept
     // TODO: calculate the offset of the member and pass it to the load nodes
     // TODO: error if the node is not integer
     auto const node = make(bld, load_node{
-                                    .base = base,
+                                    .base = base.node,
                                     .offset = bld.reg.get<node_type>(offset_node).type->as<int_value>(),
                                 });
 
     // TODO: inline CPS this
-    return post_expr(node); // post_expr(parsed)
+    return post_expr({
+        .node = node,
+        .assign = base.assign,
+    }); // post_expr(parsed)
 }
 
 // TODO: recheck the rule to parse `&` and `*` rhs at correct precedence
-inline entt::entity parser::primary() noexcept
+inline expr_info parser::primary() noexcept
 {
     // TODO: CPS the `expr` calls here, repeat for `call`, `index` and `post_expr`, etc.
     using enum token_kind;
@@ -174,7 +186,11 @@ inline entt::entity parser::primary() noexcept
         uint64_t val{};
         std::from_chars(txt.data(), txt.data() + txt.size(), val);
         // HACK: figure out actual int size
-        return make(bld, value_node{int_const::make(val)});
+        return {
+            .node = make(bld, value_node{int_const::make(val)}),
+            // integers are not assignable to
+            .assign = assign_index::none,
+        };
     }
 
     case Decimal:
@@ -184,62 +200,97 @@ inline entt::entity parser::primary() noexcept
         double val{};
         std::from_chars(txt.data(), txt.data() + txt.size(), val);
         // HACK: figure out actual int size
-        return make(bld, value_node{new float64{val}});
+        return {
+            .node = make(bld, value_node{new float64{val}}),
+            // decimals are not assignable to
+            .assign = assign_index::none,
+        };
     }
 
     case KwFalse:
-        return make(bld, value_node{bool_const::False()});
+        return {
+            .node = make(bld, value_node{bool_const::False()}),
+            // you cannot assign to `false`
+            .assign = assign_index::none,
+        };
     case KwTrue:
-        return make(bld, value_node{bool_const::True()});
+        return {
+            .node = make(bld, value_node{bool_const::True()}),
+            // you cannot assign to `true`
+            .assign = assign_index::none,
+        };
 
     // TODO: don't use integer type here anymore
     case KwNil:
-        return make(bld, value_node{nil_value::self()});
+        return {
+            .node = make(bld, value_node{nil_value::self()}),
+            // you cannot assign to `nil`
+            .assign = assign_index::none,
+        };
 
     // post_expr( '(' expr ')' )
     case LeftParen:
     {
         auto const ret = expr(); // expr
         eat(RightParen);         // ')'
-        // TODO: is this ok or should you wrap it?
+        // TODO: is this ok or should you wrap it? (assign, address)
         return post_expr(ret);
     }
 
     // '!' expr
     case Bang:
     {
-        auto const sub = expr(); // expr
-        return make(bld, not_node{.sub = sub});
+        auto const sub = expr().node;
+        return {
+            .node = make(bld, not_node{.sub = sub}),
+            // you cannot assign to `!expr`
+            .assign = assign_index::none,
+        };
     }
 
     // '-' expr
     case Minus:
     {
-        auto const sub = expr();
-        return make(bld, neg_node{.sub = sub});
+        auto const sub = expr().node;
+        return {
+            .node = make(bld, neg_node{.sub = sub}),
+            // you cannot assign to `-expr`
+            .assign = assign_index::none,
+        };
     }
 
     // '*' expr
     case Star:
     {
         auto const sub = expr();
-        return make(bld, deref_node{.sub = sub});
+        return {
+            .node = make(bld, deref_node{.sub = sub.node}),
+            // TODO: is this correct?
+            .assign = sub.assign,
+        };
     }
 
     // '&' expr
     case And:
     {
-        auto const sub = expr();
-        return make(bld, addr_node{.sub = sub});
+        auto const sub = expr().node;
+        return {
+            .node = make(bld, addr_node{.sub = sub}),
+            // TODO: is this correct?
+            .assign = assign_index::none,
+        };
     }
 
     default:
         std::unreachable();
-        return entt::null;
+        return {
+            .node = entt::null,
+            .assign = assign_index::none,
+        };
     }
 }
 
-inline entt::entity parser::expr(parse_prec prec) noexcept
+inline expr_info parser::expr(parse_prec prec) noexcept
 {
     auto lhs = primary();
 
@@ -249,7 +300,11 @@ inline entt::entity parser::expr(parse_prec prec) noexcept
         auto const op = scan.next().kind;
         auto const rhs = expr(rprec);
 
-        lhs = binary_node(op, lhs, rhs);
+        lhs = {
+            .node = binary_node(op, lhs.node, rhs.node),
+            // you cannot assign to a binary expression
+            .assign = assign_index::none,
+        };
     }
 
     return lhs;
@@ -257,13 +312,15 @@ inline entt::entity parser::expr(parse_prec prec) noexcept
 
 inline smallvec parser::expr_list_term(token_kind term) noexcept
 {
+    // TODO: do you ever need the assign/address info for the parsed nodes?
+
     auto parse_arguments = [&](auto &&self, stacklist<entt::entity> *ins, int list_size = 0)
         -> smallvec
     {
         // TODO: is the control flow correct here?
         if (scan.peek.kind != term)
         {
-            auto const arg = expr(); // expr
+            auto const arg = expr().node; // expr
             stacklist node{.value = arg, .prev = ins};
             ins = &node;
             ++list_size;
@@ -284,7 +341,8 @@ inline smallvec parser::expr_list_term(token_kind term) noexcept
 
 inline smallvec parser::expr_list() noexcept
 {
-    auto const first = expr(); // expr
+    // TODO: do you ever need the assign/address info for the parsed nodes?
+    auto const first = expr().node; // expr
     stacklist head{.value = first};
 
     auto parse_arguments = [&](auto &&self, stacklist<entt::entity> *ins, int list_size = 0)
@@ -293,8 +351,8 @@ inline smallvec parser::expr_list() noexcept
         // TODO: is the control flow correct here?
         if (scan.peek.kind == token_kind::Comma)
         {
-            scan.next();             // ','
-            auto const arg = expr(); // expr
+            scan.next();                  // ','
+            auto const arg = expr().node; // expr
             stacklist node{.value = arg, .prev = ins};
 
             return self(self, &node, list_size + 1);
@@ -353,7 +411,7 @@ inline entt::entity parser::binary_node(token_kind kind, entt::entity lhs, entt:
     }
 }
 
-inline entt::entity parser::type_expr_or_ident() noexcept
+inline expr_info parser::type_expr_or_ident() noexcept
 {
     ::type const *ty = nullptr;
 
@@ -366,12 +424,18 @@ inline entt::entity parser::type_expr_or_ident() noexcept
         if (is_type(index))
             ty = env.get_type(index);
         else if (index != name_index::missing)
-            return post_expr(env.values[(uint32_t)index]);
+            return post_expr({
+                .node = env.values[(uint32_t)index],
+                .assign = assign_index{(uint32_t)index}, // TODO: is this correct?
+            });
         // TODO: address this
         else
         {
             fail(nametok, "Using a name before declaration is not supported yet");
-            return entt::null;
+            return {
+                .node = entt::null,
+                .assign = assign_index::none,
+            };
         }
     }
     else
@@ -384,27 +448,101 @@ inline entt::entity parser::type_expr_or_ident() noexcept
     // cast
     case token_kind::LeftParen:
     {
-        scan.next();                 // '('
-        auto const sub = expr();     // expr
-        eat(token_kind::RightParen); // ')'
+        scan.next();                  // '('
+        auto const sub = expr().node; // expr
+        eat(token_kind::RightParen);  // ')'
 
         auto const cast = make(bld, cast_node{.target = ty, .base = sub});
-        return post_expr(cast);
+        return post_expr({
+            .node = cast,
+            // you cannot assign to cast expressions, but maybe to the resulting sub-expression (can you?)
+            .assign = assign_index::none,
+        });
     }
 
     // init
     case token_kind::LeftBrace:
     {
-        scan.next();                                           // '{'
+        // parsing
+
+        auto lbrace = scan.next();                             // '{'
         auto members = expr_list_term(token_kind::RightBrace); // '}'
+
+        // codegen
+
+        // HACK: do something better here
+        if (!ty->as<struct_type>() && !ty->as<::array_type>())
+            fail(lbrace, "Type cannot be brace-initialized");
 
         // TODO: construct the object (emit the Stores)
         auto const init = make(bld, alloca_node{.ty = ty});
-        return post_expr(init);
+        auto ret = init;
+
+        // TODO: if arg_members==0, do a full Zero (memset)
+
+        size_t i{};
+        for (; i < members.n; ++i)
+        {
+            auto set = make(bld, store_node{
+                                     .lhs = init,
+                                     .offset = int_const::make((int64_t)i),
+                                     .rhs = members[i],
+                                 });
+            ret = set;
+        }
+
+        // HACK: implement this better
+        if (auto sty = ty->as<struct_type>())
+        {
+            auto const n_ty_members = sty->n_members;
+
+            for (; i < n_ty_members; ++i)
+            {
+                auto set = make(bld, store_node{
+                                         .lhs = init,
+                                         .offset = int_const::make((int64_t)i),
+                                         .rhs = make(bld, value_node{sty->members[i].ty->zero()}),
+                                     });
+                ret = set;
+            }
+        }
+        else if (auto aty = ty->as<::array_type>())
+        {
+            auto const n_ty_members = ty->as<::array_type>()->n;
+            // optimizations: do not make the zero-value node unless there is a member to initialize
+            if (i < n_ty_members)
+            {
+                // optimization: all array members have the same type, hence the same zero-value
+                auto zero = make(bld, value_node{aty->base->zero()});
+
+                for (; i < n_ty_members; ++i)
+                {
+                    auto set = make(bld, store_node{
+                                             .lhs = init,
+                                             .offset = int_const::make((int64_t)i),
+                                             .rhs = zero,
+                                         });
+                    ret = set;
+                }
+            }
+        }
+        else
+        {
+            std::unreachable();
+        }
+
+        return post_expr({
+            .node = init, // TODO: is this correct here?
+            // you cannot assign to type literal expressions, but maybe to the resulting sub-expression (can you?)
+            .assign = assign_index::none,
+        });
     }
 
     default:
         fail(scan.peek, "Expected '(` or `{` after type");
-        return entt::null;
+        return {
+            .node = entt::null,
+            .assign = assign_index::none,
+        };
     }
 }

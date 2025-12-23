@@ -12,16 +12,14 @@ struct float_value : value
                    ? rhs
                    : value::assign(rhs);
     }
-
-    inline char const *name() const noexcept override { return "{float}"; }
 };
 
-struct float_top final : float_value
+struct float_bot final : float_value
 {
     inline static value const *self() noexcept
     {
-        static float_top top;
-        return &top;
+        static float_bot bot;
+        return &bot;
     }
 
     // impl value
@@ -59,24 +57,24 @@ struct float_top final : float_value
     inline value const *eq(value const *rhs) const noexcept
     {
         return (rhs->as<float_value>())
-                   ? bool_top::self()
+                   ? bool_bot::self()
                    : value::eq(rhs);
     }
 
     inline value const *lt(value const *rhs) const noexcept
     {
         return (rhs->as<float_value>())
-                   ? bool_top::self()
+                   ? bool_bot::self()
                    : value::lt(rhs);
     }
 };
 
-struct float_bot final : float_value
+struct float_top final : float_value
 {
     inline static value const *self() noexcept
     {
-        static float_bot bot;
-        return &bot;
+        static float_top top;
+        return &top;
     }
 
     // impl value
@@ -102,11 +100,11 @@ struct float32 final : float_value
     // impl value
     inline value const *add(value const *rhs) const noexcept
     {
-        if (rhs->as<float_bot>())
+        if (rhs->as<float_top>())
             return rhs;
         else if (auto ptr = rhs->as<float32>())
             return new float32{f + ptr->f};
-        else if (rhs->as<float_top>())
+        else if (rhs->as<float_bot>())
             return this;
         else
             return value::add(rhs);
@@ -114,11 +112,11 @@ struct float32 final : float_value
 
     inline value const *sub(value const *rhs) const noexcept
     {
-        if (rhs->as<float_bot>())
+        if (rhs->as<float_top>())
             return rhs;
         else if (auto ptr = rhs->as<float32>())
             return new float32{f - ptr->f};
-        else if (rhs->as<float_top>())
+        else if (rhs->as<float_bot>())
             return this;
         else
             return value::sub(rhs);
@@ -126,11 +124,11 @@ struct float32 final : float_value
 
     inline value const *mul(value const *rhs) const noexcept
     {
-        if (rhs->as<float_bot>())
+        if (rhs->as<float_top>())
             return rhs;
         else if (auto ptr = rhs->as<float32>(); ptr)
             return new float32{f * ptr->f};
-        else if (rhs->as<float_top>())
+        else if (rhs->as<float_bot>())
             return this;
         else
             return value::mul(rhs);
@@ -138,11 +136,11 @@ struct float32 final : float_value
 
     inline value const *div(value const *rhs) const noexcept
     {
-        if (rhs->as<float_bot>())
+        if (rhs->as<float_top>())
             return rhs;
         else if (auto ptr = rhs->as<float32>(); ptr)
-            return (ptr->f == 0.0f) ? float_top::self() : new float32{f / ptr->f};
-        else if (rhs->as<float_top>())
+            return (ptr->f == 0.0f) ? float_bot::self() : new float32{f / ptr->f};
+        else if (rhs->as<float_bot>())
             return this;
         else
             return value::div(rhs);
@@ -152,29 +150,27 @@ struct float32 final : float_value
 
     inline value const *eq(value const *rhs) const noexcept
     {
-        if (rhs->as<float_bot>())
-            return bool_bot::self();
+        if (rhs->as<float_top>())
+            return bool_top::self();
         else if (auto ptr = rhs->as<float32>(); ptr)
             return bool_const::make(f == ptr->f);
-        else if (rhs->as<float_top>())
-            return bool_top::self();
+        else if (rhs->as<float_bot>())
+            return bool_bot::self();
         else
             return value::eq(rhs);
     }
 
     inline value const *lt(value const *rhs) const noexcept
     {
-        if (rhs->as<float_bot>())
-            return bool_bot::self();
+        if (rhs->as<float_top>())
+            return bool_top::self();
         else if (auto ptr = rhs->as<float32>(); ptr)
             return bool_const::make(f < ptr->f);
-        else if (rhs->as<float_top>())
-            return bool_top::self();
+        else if (rhs->as<float_bot>())
+            return bool_bot::self();
         else
             return value::lt(rhs);
     }
-
-    inline char const *name() const noexcept final { return "float32"; }
 
     float f;
 };
@@ -188,11 +184,11 @@ struct float64 final : float_value
     // impl value
     inline value const *add(value const *rhs) const noexcept
     {
-        if (rhs->as<float_bot>())
+        if (rhs->as<float_top>())
             return rhs;
         else if (auto ptr = rhs->as<float64>())
             return new float64{d + ptr->d};
-        else if (rhs->as<float_top>())
+        else if (rhs->as<float_bot>())
             return this;
         else
             return value::add(rhs);
@@ -200,11 +196,11 @@ struct float64 final : float_value
 
     inline value const *sub(value const *rhs) const noexcept
     {
-        if (rhs->as<float_bot>())
+        if (rhs->as<float_top>())
             return rhs;
         else if (auto ptr = rhs->as<float64>())
             return new float64{d - ptr->d};
-        else if (rhs->as<float_top>())
+        else if (rhs->as<float_bot>())
             return this;
         else
             return value::sub(rhs);
@@ -212,11 +208,11 @@ struct float64 final : float_value
 
     inline value const *mul(value const *rhs) const noexcept
     {
-        if (rhs->as<float_bot>())
+        if (rhs->as<float_top>())
             return rhs;
         else if (auto ptr = rhs->as<float64>(); ptr)
             return new float64{d * ptr->d};
-        else if (rhs->as<float_top>())
+        else if (rhs->as<float_bot>())
             return this;
         else
             return value::mul(rhs);
@@ -224,11 +220,11 @@ struct float64 final : float_value
 
     inline value const *div(value const *rhs) const noexcept
     {
-        if (rhs->as<float_bot>())
+        if (rhs->as<float_top>())
             return rhs;
         else if (auto ptr = rhs->as<float64>(); ptr)
-            return (ptr->d == 0.0) ? float_top::self() : new float64{d / ptr->d};
-        else if (rhs->as<float_top>())
+            return (ptr->d == 0.0) ? float_bot::self() : new float64{d / ptr->d};
+        else if (rhs->as<float_bot>())
             return this;
         else
             return value::div(rhs);
@@ -238,35 +234,35 @@ struct float64 final : float_value
 
     inline value const *eq(value const *rhs) const noexcept
     {
-        if (rhs->as<float_bot>())
-            return bool_bot::self();
+        if (rhs->as<float_top>())
+            return bool_top::self();
         else if (auto ptr = rhs->as<float64>(); ptr)
             return bool_const::make(d == ptr->d);
-        else if (rhs->as<float_top>())
-            return bool_top::self();
+        else if (rhs->as<float_bot>())
+            return bool_bot::self();
         else
             return value::eq(rhs);
     }
 
     inline value const *lt(value const *rhs) const noexcept
     {
-        if (rhs->as<float_bot>())
-            return bool_bot::self();
+        if (rhs->as<float_top>())
+            return bool_top::self();
         else if (auto ptr = rhs->as<float64>(); ptr)
             return bool_const::make(d < ptr->d);
-        else if (rhs->as<float_top>())
-            return bool_top::self();
+        else if (rhs->as<float_bot>())
+            return bool_bot::self();
         else
             return value::lt(rhs);
     }
-
-    inline char const *name() const noexcept final { return "float64"; }
 
     double d;
 };
 
 struct float64_type final : type
 {
-    // TODO: address the naming here
-    inline value const *top() const noexcept { return float_bot::self(); }
+    inline value const *top() const noexcept { return float_top::self(); }
+    // TOOD: cache this
+    inline value const *zero() const noexcept { return new float64{0.0}; }
+    inline char const *name() const noexcept { return "float64"; }
 };

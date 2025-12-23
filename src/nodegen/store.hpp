@@ -20,8 +20,9 @@ static_assert(nodegen<store_node>);
 
 inline value const *store_node::infer(type_storage const &types) const
 {
-    // TODO: include the offset here
-    // if (offset == entt::null)
+    // TODO: is this correct now?
+    if (offset)
+        return types.get(lhs).type->index(offset)->assign(types.get(rhs).type);
     return types.get(lhs).type->assign(types.get(rhs).type);
 }
 
@@ -33,7 +34,8 @@ inline entt::entity store_node::emit(builder &bld, value const *val) const
     // HACK: used to inline `Load`/`Store` as there is no way in the parser to detect rvalues right now...
     if (bld.reg.get<node_op>(lhs) == node_op::Load)
     {
-        bld.reg.emplace<mem_effect>(store, bld.reg.get<mem_effect const>(lhs));
+        // update the `prev` node as the LHS is generated first, but we need the RHS to be evaluated first
+        bld.reg.emplace<mem_effect>(store, bld.reg.get<mem_effect const>(lhs)).prev = bld.state.mem;
     }
     else
     {
@@ -41,6 +43,7 @@ inline entt::entity store_node::emit(builder &bld, value const *val) const
         // TODO: recheck this
         // TODO: tag=-1 should not be Top, instead it should propagate up
         bld.reg.emplace<mem_effect>(store) = {
+            .prev = bld.state.mem, // TODO: is this correct?
             .target = lhs,
             .tag = offset->as<int_const>() ? (uint32_t)offset->as<int_const>()->n : ~uint32_t{},
         };

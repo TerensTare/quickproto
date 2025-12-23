@@ -4,3 +4,4 @@
 #include "parser/decl.hpp"
 #include "parser/expr.hpp"
 #include "parser/stmt.hpp"
+#include "parser/type.hpp"

@@ -11,16 +11,14 @@ struct bool_value : value
                    ? rhs
                    : value::assign(rhs);
     }
-
-    inline char const *name() const noexcept final { return "bool"; }
 };
 
-struct bool_top final : bool_value
+struct bool_bot final : bool_value
 {
     inline static value const *self() noexcept
     {
-        static bool_top top;
-        return &top;
+        static bool_bot bot;
+        return &bot;
     }
 
     // impl value
@@ -126,12 +124,12 @@ private:
         : b{b} {}
 };
 
-struct bool_bot final : bool_value
+struct bool_top final : bool_value
 {
     inline static value const *self() noexcept
     {
-        static bool_bot bot;
-        return &bot;
+        static bool_top top;
+        return &top;
     }
 
     // impl value
@@ -166,6 +164,8 @@ struct bool_bot final : bool_value
 
 struct bool_type final : type
 {
-    // TODO: address the naming here
-    inline value const *top() const noexcept { return bool_bot::self(); }
+    inline value const *top() const noexcept { return bool_top::self(); }
+    inline value const *zero() const noexcept { return bool_const::False(); }
+
+    inline char const *name() const noexcept { return "bool"; }
 };

@@ -99,18 +99,15 @@ struct value
 
     // target(self)
     virtual value const *cast(type const *target) const noexcept;
-
-    // TODO: how do you implement this on `struct`, `func`, `tuple`, etc.?
-    virtual char const *name() const noexcept = 0;
 };
 
 // unknown type, used for nodes whose type is lazy-evaluated (eg. calls to not-yet declared functions)
 // TODO: do you need to overload the operators for this?
-struct bot_type final : value
+struct top_type final : value
 {
     inline static value const *self() noexcept
     {
-        static bot_type ty;
+        static top_type ty;
         return &ty;
     }
 
@@ -119,8 +116,6 @@ struct bot_type final : value
 
     inline value const *neg() const noexcept { return this; }
     inline value const *unot() const noexcept { return this; }
-
-    char const *name() const noexcept { return "{unknown}"; }
 };
 
 // Error that happens during the typecheck stage.
@@ -135,8 +130,6 @@ struct unary_op_not_implemented_type final : value_error
     // TODO: these should be values, but not errors, right?
     inline unary_op_not_implemented_type(char const *op, value const *sub) noexcept
         : op{op}, sub{sub} {}
-
-    inline char const *name() const noexcept { return "<unary-op-not-implemented>"; }
 
     // TODO: stronger type for the operator
     char const *op;
@@ -165,8 +158,6 @@ struct binary_op_not_implemented_type final : value_error
     inline value const *eq(value const *rhs) const noexcept { return this; }
     inline value const *lt(value const *rhs) const noexcept { return this; }
 
-    inline char const *name() const noexcept { return "<binary-op-not-implemented>"; }
-
     // TODO: stronger type for the operator
     char const *op;
     value const *lhs;
@@ -179,8 +170,6 @@ struct no_member_error final : value_error
     inline no_member_error(value const *base, std::string_view member)
         : base{base}, member{member} {}
 
-    inline char const *name() const noexcept { return "<no-member-with-this-name>"; }
-
     value const *base;
     std::string_view member;
 };
@@ -188,35 +177,35 @@ struct no_member_error final : value_error
 inline value const *value::assign(value const *rhs) const noexcept
 {
     // TODO: is this correct? not entirely
-    return rhs->as<bot_type>()
+    return rhs->as<top_type>()
                ? rhs
                : new binary_op_not_implemented_type{"=", this, rhs};
 }
 
 inline value const *value::add(value const *rhs) const noexcept
 {
-    return rhs->as<bot_type>()
+    return rhs->as<top_type>()
                ? rhs
                : new binary_op_not_implemented_type{"+", this, rhs};
 }
 
 inline value const *value::sub(value const *rhs) const noexcept
 {
-    return rhs->as<bot_type>()
+    return rhs->as<top_type>()
                ? rhs
                : new binary_op_not_implemented_type{"-", this, rhs};
 }
 
 inline value const *value::mul(value const *rhs) const noexcept
 {
-    return rhs->as<bot_type>()
+    return rhs->as<top_type>()
                ? rhs
                : new binary_op_not_implemented_type{"*", this, rhs};
 }
 
 inline value const *value::div(value const *rhs) const noexcept
 {
-    return rhs->as<bot_type>()
+    return rhs->as<top_type>()
                ? rhs
                : new binary_op_not_implemented_type{"/", this, rhs};
 }
@@ -228,49 +217,49 @@ inline value const *value::addr() const noexcept { return new unary_op_not_imple
 
 inline value const *value::eq(value const *rhs) const noexcept
 {
-    return rhs->as<bot_type>()
+    return rhs->as<top_type>()
                ? rhs
                : new binary_op_not_implemented_type{"==", this, rhs};
 }
 
 inline value const *value::lt(value const *rhs) const noexcept
 {
-    return rhs->as<bot_type>()
+    return rhs->as<top_type>()
                ? rhs
                : new binary_op_not_implemented_type{"<", this, rhs};
 }
 
 inline value const *value::logic_and(value const *rhs) const noexcept
 {
-    return rhs->as<bot_type>()
+    return rhs->as<top_type>()
                ? rhs
                : new binary_op_not_implemented_type{"&&", this, rhs};
 }
 
 inline value const *value::logic_or(value const *rhs) const noexcept
 {
-    return rhs->as<bot_type>()
+    return rhs->as<top_type>()
                ? rhs
                : new binary_op_not_implemented_type{"||", this, rhs};
 }
 
 inline value const *value::band(value const *rhs) const noexcept
 {
-    return rhs->as<bot_type>()
+    return rhs->as<top_type>()
                ? rhs
                : new binary_op_not_implemented_type{"&", this, rhs};
 }
 
 inline value const *value::bxor(value const *rhs) const noexcept
 {
-    return rhs->as<bot_type>()
+    return rhs->as<top_type>()
                ? rhs
                : new binary_op_not_implemented_type{"^", this, rhs};
 }
 
 inline value const *value::bor(value const *rhs) const noexcept
 {
-    return rhs->as<bot_type>()
+    return rhs->as<top_type>()
                ? rhs
                : new binary_op_not_implemented_type{"|", this, rhs};
 }

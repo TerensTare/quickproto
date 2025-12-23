@@ -5,8 +5,6 @@
 
 struct assign_to_const_type final : value
 {
-    // TODO: find a better name
-    char const *name() const noexcept { return "<assign-to-const>"; }
 };
 
 struct const_type final : value
@@ -16,9 +14,6 @@ struct const_type final : value
 
     // TODO: pass more info
     value const *assign(value const *rhs) const noexcept { return new assign_to_const_type{}; }
-
-    // TODO: find a better name
-    char const *name() const noexcept { return "const"; }
 
     value const *sub;
 };

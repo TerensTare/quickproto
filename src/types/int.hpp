@@ -11,8 +11,6 @@ struct invalid_cast final : value_error
 {
     inline invalid_cast(value const *val, type const *target) noexcept : val{val}, target{target} {}
 
-    inline char const *name() const noexcept { return "<invalid-cast>"; }
-
     value const *val;
     type const *target;
 };
@@ -25,16 +23,14 @@ struct int_value : value
                    ? rhs
                    : value::assign(rhs);
     }
-
-    inline char const *name() const noexcept final { return "int"; }
 };
 
-struct int_top final : int_value
+struct int_bot final : int_value
 {
     inline static value const *self() noexcept
     {
-        static int_top top;
-        return &top;
+        static int_bot bot;
+        return &bot;
     }
 
     // impl value
@@ -72,52 +68,52 @@ struct int_top final : int_value
     inline value const *eq(value const *rhs) const noexcept
     {
         return (rhs->as<int_value>())
-                   ? bool_top::self()
+                   ? bool_bot::self()
                    : value::eq(rhs);
     }
 
     inline value const *ne(value const *rhs) const noexcept
     {
         return (rhs->as<int_value>())
-                   ? bool_top::self()
+                   ? bool_bot::self()
                    : value::ne(rhs);
     }
 
     inline value const *lt(value const *rhs) const noexcept
     {
         return (rhs->as<int_value>())
-                   ? bool_top::self()
+                   ? bool_bot::self()
                    : value::lt(rhs);
     }
 
     inline value const *le(value const *rhs) const noexcept
     {
         return (rhs->as<int_value>())
-                   ? bool_top::self()
+                   ? bool_bot::self()
                    : value::le(rhs);
     }
 
     inline value const *gt(value const *rhs) const noexcept
     {
         return (rhs->as<int_value>())
-                   ? bool_top::self()
+                   ? bool_bot::self()
                    : value::gt(rhs);
     }
 
     inline value const *ge(value const *rhs) const noexcept
     {
         return (rhs->as<int_value>())
-                   ? bool_top::self()
+                   ? bool_bot::self()
                    : value::ge(rhs);
     }
 };
 
-struct int_bot final : int_value
+struct int_top final : int_value
 {
     inline static value const *self() noexcept
     {
-        static int_bot bot;
-        return &bot;
+        static int_top top;
+        return &top;
     }
 
     // impl value
@@ -218,8 +214,10 @@ struct int_bot final : int_value
 
 struct sint_type final : type
 {
-    // TODO: address the naming here
-    inline value const *top() const noexcept { return int_bot::self(); }
+    inline value const *top() const noexcept { return int_top::self(); }
+    inline value const *zero() const noexcept;
+
+    inline char const *name() const noexcept { return "int"; }
 };
 
 struct int_const final : int_value
@@ -238,11 +236,11 @@ struct int_const final : int_value
     // impl value
     inline value const *add(value const *rhs) const noexcept
     {
-        if (rhs->as<int_bot>())
+        if (rhs->as<int_top>())
             return rhs;
         else if (auto ptr = rhs->as<int_const>(); ptr)
             return int_const::make(n + ptr->n);
-        else if (rhs->as<int_top>())
+        else if (rhs->as<int_bot>())
             return this;
         else
             return value::add(rhs);
@@ -250,11 +248,11 @@ struct int_const final : int_value
 
     inline value const *sub(value const *rhs) const noexcept
     {
-        if (rhs->as<int_bot>())
+        if (rhs->as<int_top>())
             return rhs;
         else if (auto ptr = rhs->as<int_const>(); ptr)
             return int_const::make(n - ptr->n);
-        else if (rhs->as<int_top>())
+        else if (rhs->as<int_bot>())
             return this;
         else
             return value::sub(rhs);
@@ -262,11 +260,11 @@ struct int_const final : int_value
 
     inline value const *mul(value const *rhs) const noexcept
     {
-        if (rhs->as<int_bot>())
+        if (rhs->as<int_top>())
             return rhs;
         else if (auto ptr = rhs->as<int_const>(); ptr)
             return int_const::make(n * ptr->n);
-        else if (rhs->as<int_top>())
+        else if (rhs->as<int_bot>())
             return this;
         else
             return value::mul(rhs);
@@ -274,11 +272,11 @@ struct int_const final : int_value
 
     inline value const *div(value const *rhs) const noexcept
     {
-        if (rhs->as<int_bot>())
+        if (rhs->as<int_top>())
             return rhs;
         else if (auto ptr = rhs->as<int_const>(); ptr)
-            return (ptr->n == 0) ? int_top::self() : int_const::make(n / ptr->n);
-        else if (rhs->as<int_top>())
+            return (ptr->n == 0) ? int_bot::self() : int_const::make(n / ptr->n);
+        else if (rhs->as<int_bot>())
             return this;
         else
             return value::div(rhs);
@@ -288,83 +286,83 @@ struct int_const final : int_value
 
     inline value const *eq(value const *rhs) const noexcept
     {
-        if (rhs->as<int_bot>())
-            return bool_bot::self();
+        if (rhs->as<int_top>())
+            return bool_top::self();
         else if (auto ptr = rhs->as<int_const>(); ptr)
             return bool_const::make(n == ptr->n);
-        else if (rhs->as<int_top>())
-            return bool_top::self();
+        else if (rhs->as<int_bot>())
+            return bool_bot::self();
         else
             return value::eq(rhs);
     }
 
     inline value const *ne(value const *rhs) const noexcept
     {
-        if (rhs->as<int_bot>())
-            return bool_bot::self();
+        if (rhs->as<int_top>())
+            return bool_top::self();
         else if (auto ptr = rhs->as<int_const>(); ptr)
             return bool_const::make(n != ptr->n);
-        else if (rhs->as<int_top>())
-            return bool_top::self();
+        else if (rhs->as<int_bot>())
+            return bool_bot::self();
         else
             return value::ne(rhs);
     }
 
     inline value const *lt(value const *rhs) const noexcept
     {
-        if (rhs->as<int_bot>())
-            return bool_bot::self();
+        if (rhs->as<int_top>())
+            return bool_top::self();
         else if (auto ptr = rhs->as<int_const>(); ptr)
             return bool_const::make(n < ptr->n);
-        else if (rhs->as<int_top>())
-            return bool_top::self();
+        else if (rhs->as<int_bot>())
+            return bool_bot::self();
         else
             return value::lt(rhs);
     }
 
     inline value const *le(value const *rhs) const noexcept
     {
-        if (rhs->as<int_bot>())
-            return bool_bot::self();
+        if (rhs->as<int_top>())
+            return bool_top::self();
         else if (auto ptr = rhs->as<int_const>(); ptr)
             return bool_const::make(n <= ptr->n);
-        else if (rhs->as<int_top>())
-            return bool_top::self();
+        else if (rhs->as<int_bot>())
+            return bool_bot::self();
         else
             return value::le(rhs);
     }
 
     inline value const *gt(value const *rhs) const noexcept
     {
-        if (rhs->as<int_bot>())
-            return bool_bot::self();
+        if (rhs->as<int_top>())
+            return bool_top::self();
         else if (auto ptr = rhs->as<int_const>(); ptr)
             return bool_const::make(n > ptr->n);
-        else if (rhs->as<int_top>())
-            return bool_top::self();
+        else if (rhs->as<int_bot>())
+            return bool_bot::self();
         else
             return value::gt(rhs);
     }
 
     inline value const *ge(value const *rhs) const noexcept
     {
-        if (rhs->as<int_bot>())
-            return bool_bot::self();
+        if (rhs->as<int_top>())
+            return bool_top::self();
         else if (auto ptr = rhs->as<int_const>(); ptr)
             return bool_const::make(n >= ptr->n);
-        else if (rhs->as<int_top>())
-            return bool_top::self();
+        else if (rhs->as<int_bot>())
+            return bool_bot::self();
         else
             return value::ge(rhs);
     }
 
     inline value const *band(value const *rhs) const noexcept
     {
-        if (rhs->as<int_bot>())
+        if (rhs->as<int_top>())
             return rhs;
         else if (auto ptr = rhs->as<int_const>(); ptr)
             return int_const::make(n & ptr->n);
-        else if (rhs->as<int_top>())
+        else if (rhs->as<int_bot>())
             return this;
         else
             return value::band(rhs);
@@ -372,11 +370,11 @@ struct int_const final : int_value
 
     inline value const *bxor(value const *rhs) const noexcept
     {
-        if (rhs->as<int_bot>())
+        if (rhs->as<int_top>())
             return rhs;
         else if (auto ptr = rhs->as<int_const>(); ptr)
             return int_const::make(n ^ ptr->n);
-        else if (rhs->as<int_top>())
+        else if (rhs->as<int_bot>())
             return this;
         else
             return value::bxor(rhs);
@@ -384,11 +382,11 @@ struct int_const final : int_value
 
     inline value const *bor(value const *rhs) const noexcept
     {
-        if (rhs->as<int_bot>())
+        if (rhs->as<int_top>())
             return rhs;
         else if (auto ptr = rhs->as<int_const>(); ptr)
             return int_const::make(n | ptr->n);
-        else if (rhs->as<int_top>())
+        else if (rhs->as<int_bot>())
             return this;
         else
             return value::bor(rhs);
@@ -419,3 +417,5 @@ struct int_range final : int_value
 
     int64_t lo, hi;
 };
+
+inline value const *sint_type::zero() const noexcept { return int_const::make(0); }

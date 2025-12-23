@@ -10,7 +10,7 @@ inline entt::entity parser::local_decl(token lhs) noexcept
     // TODO: eat this outside of this function
     eat(token_kind::Walrus); // :=
     // TODO: parse an expression list instead
-    auto rhs = expr();          // expr
+    auto rhs = expr().node;     // expr
     eat(token_kind::Semicolon); // ;
 
     // codegen
@@ -22,31 +22,35 @@ inline entt::entity parser::local_decl(token lhs) noexcept
     return stmt();
 }
 
-inline entt::entity parser::assign(entt::entity lhs) noexcept
+inline entt::entity parser::assign(expr_info lhs) noexcept
 {
     // parsing
-    eat(token_kind::Equal); // '='
+    auto const optok = eat(token_kind::Equal); // '='
 
     // auto const name = str.intern(id);
     // auto const lhs = env.get_var(name);
 
     // TODO: handle multi-expression case
-    auto const rhs = expr();    // expr
-    eat(token_kind::Semicolon); // ';'
+    auto const rhs = expr().node; // expr
+    eat(token_kind::Semicolon);   // ';'
 
     // codegen
 
-    // TODO: update the environment
+    if (lhs.assign == assign_index::none)
+        fail(optok, "Cannot assign to expression on the left side!");
+
     auto const store = make(bld, store_node{
-                                     .lhs = lhs,
+                                    //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
+                                     .lhs = lhs.node,
                                      .rhs = rhs,
                                  });
-    // env.set_var(name, opnode);
+
+    // env.set_value((name_index)uint32_t(lhs.assign), store);
 
     return stmt();
 }
 
-inline entt::entity parser::compound_assign(entt::entity lhs) noexcept
+inline entt::entity parser::compound_assign(expr_info lhs) noexcept
 {
     // parsing
 
@@ -60,43 +64,48 @@ inline entt::entity parser::compound_assign(entt::entity lhs) noexcept
         token_kind::OrEqual,
     };
 
-    auto const optok = eat(ops).kind; // compound_op
+    auto const full_optok = eat(ops); // compound_op
+    auto const optok = full_optok.kind;
 
     // auto const name = str.intern(id);
     // auto const lhs = env.get_var(name);
 
     // TODO: handle multi-expression case
-    auto const rhs = expr();    // expr
-    eat(token_kind::Semicolon); // ';'
+    auto const rhs = expr().node; // expr
+    eat(token_kind::Semicolon);   // ';'
 
     // codegen
 
     auto const opnode =
         optok == token_kind::PlusEqual
-            ? make(bld, add_node{lhs, rhs})
+            ? make(bld, add_node{lhs.node, rhs})
         : optok == token_kind::MinusEqual
-            ? make(bld, sub_node{lhs, rhs})
+            ? make(bld, sub_node{lhs.node, rhs})
         : optok == token_kind::StarEqual
-            ? make(bld, mul_node{lhs, rhs})
+            ? make(bld, mul_node{lhs.node, rhs})
         : optok == token_kind::SlashEqual
-            ? make(bld, div_node{lhs, rhs})
+            ? make(bld, div_node{lhs.node, rhs})
         : optok == token_kind::AndEqual
-            ? make(bld, bit_and_node{lhs, rhs})
+            ? make(bld, bit_and_node{lhs.node, rhs})
         : optok == token_kind::XorEqual
-            ? make(bld, bit_xor_node{lhs, rhs})
-            : make(bld, bit_or_node{lhs, rhs});
+            ? make(bld, bit_xor_node{lhs.node, rhs})
+            : make(bld, bit_or_node{lhs.node, rhs});
 
-    // TODO: update the environment
+    if (lhs.assign == assign_index::none)
+        fail(full_optok, "Cannot assign to expression on the left side!");
+
     auto const store = make(bld, store_node{
-                                     .lhs = lhs,
+                                    //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
+                                     .lhs = lhs.node,
                                      .rhs = opnode,
                                  });
-    // env.set_var(name, opnode);
+
+    // env.set_value((name_index)uint32_t(lhs.assign), store);
 
     return stmt();
 }
 
-inline entt::entity parser::post_op(entt::entity lhs) noexcept
+inline entt::entity parser::post_op(expr_info lhs) noexcept
 {
     // parsing
 
@@ -105,7 +114,8 @@ inline entt::entity parser::post_op(entt::entity lhs) noexcept
         token_kind::MinusMinus,
     };
 
-    auto const optok = eat(ops).kind;
+    auto const full_optok = eat(ops);
+    auto const optok = full_optok.kind;
 
     eat(token_kind::Semicolon); // ;
 
@@ -118,15 +128,19 @@ inline entt::entity parser::post_op(entt::entity lhs) noexcept
     auto const rhs = make(bld, value_node{int_const::make(1)});
 
     auto const opnode = optok == token_kind::PlusPlus
-                            ? make(bld, add_node{lhs, rhs})
-                            : make(bld, sub_node{lhs, rhs});
+                            ? make(bld, add_node{lhs.node, rhs})
+                            : make(bld, sub_node{lhs.node, rhs});
 
-    // TODO: update the environment's status
+    if (lhs.assign == assign_index::none)
+        fail(full_optok, "Cannot assign to expression on the left side!");
+
     auto const store = make(bld, store_node{
-                                     .lhs = lhs,
+                                    //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
+                                     .lhs = lhs.node,
                                      .rhs = opnode,
                                  });
-    // env.set_var(name, opnode);
+
+    // env.set_value((name_index)uint32_t(lhs.assign), store);
 
     return stmt();
 }
@@ -138,7 +152,7 @@ inline entt::entity parser::defer_stmt() noexcept
 
     // parsing
     auto defer = eat(token_kind::KwDefer); // 'defer'
-    auto call = expr();                    // call
+    auto call = expr().node;               // call
     eat(token_kind::Semicolon);            // ';'
 
     bld.state = old_state;
@@ -166,15 +180,15 @@ inline entt::entity parser::if_stmt() noexcept
     // TODO: ensure condition is boolean-like
 
     // parsing
-    eat(token_kind::KwIf);    // 'if'
-    auto const cond = expr(); // expr
+    eat(token_kind::KwIf);         // 'if'
+    auto const cond = expr().node; // expr
 
     // TODO: recheck the type of this
-    auto const if_yes_node = bld.make(bot_type::self(), node_op::IfYes, std::span(&cond, 1));
+    auto const if_yes_node = bld.make(top_type::self(), node_op::IfYes, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(if_yes_node, bld.state.ctrl);
 
     // TODO: recheck the type of this
-    auto const if_not_node = bld.make(bot_type::self(), node_op::IfNot, std::span(&cond, 1));
+    auto const if_not_node = bld.make(top_type::self(), node_op::IfNot, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(if_not_node, bld.state.ctrl);
 
     bld.state.ctrl = if_yes_node;
@@ -247,13 +261,13 @@ inline entt::entity parser::for_stmt() noexcept
 
     // parsing
 
-    eat(token_kind::KwFor); // 'for'
-    auto cond = expr();     // expr
+    eat(token_kind::KwFor);  // 'for'
+    auto cond = expr().node; // expr
 
     auto const loop = make(bld, loop_node{});
 
     // TODO: recheck the type of this
-    auto const if_yes_node = bld.make(bot_type::self(), node_op::IfYes, std::span(&cond, 1));
+    auto const if_yes_node = bld.make(top_type::self(), node_op::IfYes, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(if_yes_node, bld.state.ctrl);
     bld.state.ctrl = if_yes_node;
 
@@ -274,7 +288,7 @@ inline entt::entity parser::for_stmt() noexcept
 
     bld.state.ctrl = loop;
     // TODO: recheck the type of this
-    auto const rest_node = bld.make(bot_type::self(), node_op::IfNot, std::span(&cond, 1));
+    auto const rest_node = bld.make(top_type::self(), node_op::IfNot, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(rest_node, bld.state.ctrl);
     bld.state.ctrl = rest_node;
 
@@ -283,25 +297,50 @@ inline entt::entity parser::for_stmt() noexcept
     return rest_ret;
 }
 
-inline entt::entity parser::control_flow(token_kind which) noexcept
+inline entt::entity parser::break_stmt() noexcept
 {
-    // TODO: split this for better tail calls
-
     // parsing
 
+    eat(token_kind::KwBreak); // 'break'
     if (scan.peek.kind != token_kind::Semicolon)
     {
-        auto where = eat(token_kind::Ident); // <ident>?
+        auto where = eat(token_kind::Ident); // <ident>
         // TODO: implement
     }
-
-    eat(token_kind::Semicolon); // ;
+    eat(token_kind::Semicolon); // ';'
 
     // codegen
 
     // TODO: implement
     // TODO: check that this is inside a `for`/`switch`/etc.
+    scope_visibility vis;
+    bld.push_vis<visibility::unreachable>(vis);
 
+    // TODO: unreachable code
+    // TODO: tail-call this instead (`unreachable_stmt(return_)`)
+    (void)stmt();
+
+    bld.pop_vis();
+
+    return entt::null;
+}
+
+inline entt::entity parser::continue_stmt() noexcept
+{
+    // parsing
+
+    eat(token_kind::KwContinue); // 'continue'
+    if (scan.peek.kind != token_kind::Semicolon)
+    {
+        auto where = eat(token_kind::Ident); // <ident>
+        // TODO: implement
+    }
+    eat(token_kind::Semicolon); // ';'
+
+    // codegen
+
+    // TODO: implement
+    // TODO: check that this is inside a `for`/`switch`/etc.
     scope_visibility vis;
     bld.push_vis<visibility::unreachable>(vis);
 
@@ -450,8 +489,9 @@ inline entt::entity parser::stmt() noexcept
         return for_stmt();
 
     case token_kind::KwBreak:
+        return break_stmt();
     case token_kind::KwContinue:
-        return control_flow(scan.next().kind);
+        return continue_stmt();
 
     // empty statement
     case token_kind::Semicolon:

@@ -24,5 +24,5 @@ inline value const *alloca_node::infer(type_storage const &types) const
 inline entt::entity alloca_node::emit(builder &bld, value const *val) const
 {
     // TODO: implement this correctly
-    return bld.make(val, node_op::Alloca);
+    return bld.make(val, node_op::Alloca, {});
 }

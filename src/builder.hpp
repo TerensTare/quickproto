@@ -8,6 +8,7 @@
 
 // TODO:
 // - do not cut error nodes during DCE
+
 /*
     scope-based tiered visibility marking:
     - reachable: exported names and everything left by DCE
@@ -18,9 +19,6 @@
 // - memory optimizations:
 // ^ optimized memory layout
 // ^ allocate everything on an allocator, keep builder and graph trivial
-// - make `StartNode` hold `$ctrl; params...` as input and use `$ctrl`, `params...` as normal
-// - `Store` should be `Store(memory, proj, value)`
-
 using tag_storage = std::remove_cvref_t<decltype(std::declval<entt::registry>().storage<void>())>;
 
 // TODO: ensure `push` only lowers visibility and `pop` only increases with debug checks
@@ -60,12 +58,6 @@ struct builder final
     // invariant: `users` is updated for any entity in `nins`
     inline entt::entity make(value const *val, node_op op, std::span<entt::entity const> nins) noexcept;
 
-    inline entt::entity make(value const *val, node_op op) noexcept
-    {
-        entt::entity dummy[1];
-        return make(val, op, std::span(dummy, 0));
-    }
-
     // TODO: debug_ensure that the given visibility is below current level
     template <visibility Vis>
     inline void push_vis(scope_visibility &scope)
@@ -93,38 +85,38 @@ struct builder final
         entt::entity func; // the `Start` node of the function
         entt::entity ctrl;
         entt::entity mem;
+        uint32_t next_slot = 0;
     };
 
     // Push a new function state, return the old one so you can reset it
+    // TODO: pass the function name here
     [[nodiscard]]
     inline func_state new_func() noexcept
     {
-        auto const old = state;
-
         // TODO: recheck this
-        auto const ns = make(bot_type::self(), node_op::Start);
+        auto const ns = make(top_type::self(), node_op::Start, {});
         reg.emplace<mem_effect>(ns) = {
+            .prev = glob_mem,
             .target = glob_mem,
             // TODO: figure out the tag here from the scope or somewhere
-            .tag = 0,
+            .tag = state.next_slot++,
         };
         // TODO: add read/write tag
 
-        state.func = ns;
-        state.ctrl = ns;
-        state.mem = ns;
-        return old;
+        return std::exchange(
+            state, func_state{
+                       .func = ns,
+                       .ctrl = ns,
+                       .mem = ns,
+                       .next_slot = 0,
+                   });
     }
-
-    // HACK: do something better here
-    inline entt::entity lookup(node_op op, std::span<entt::entity const> ins) const noexcept;
 
     entt::entity pkg_mem;  // general package memory
     entt::entity glob_mem; // global memory (not heap)
     func_state state;
 };
 
-// TODO: specify the type here
 inline entt::entity builder::make(value const *val, node_op op, std::span<entt::entity const> nins) noexcept
 {
     auto const num_ins = nins.size();
@@ -150,13 +142,14 @@ inline void builder::report_errors()
     {
         // HACK
         // TODO: structured error messages
+        // TODO: enable these back
         if (auto b = ty.type->as<binary_op_not_implemented_type>())
         {
-            std::println("Cannot do {} {} {}!", b->lhs->name(), b->op, b->rhs->name());
+            // std::println("Cannot do {} {} {}!", b->lhs->name(), b->op, b->rhs->name());
         }
         else if (auto u = ty.type->as<unary_op_not_implemented_type>())
         {
-            std::println("Cannot do {}{}!", u->op, u->sub->name());
+            // std::println("Cannot do {}{}!", u->op, u->sub->name());
         }
         else
         {

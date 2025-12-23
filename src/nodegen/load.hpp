@@ -29,13 +29,14 @@ inline value const *load_node::infer(type_storage const &types) const
 inline entt::entity load_node::emit(builder &bld, value const *val) const
 {
     // TODO: is the value correct?
-    auto const load = bld.make(val, node_op::Load);
-
+    auto const load = bld.make(val, node_op::Load, {});
     // TODO: tag=-1 should not be Top, instead it should propagate up
     bld.reg.emplace<mem_effect>(load) = {
+        .prev = bld.state.mem, // TODO: is this correct?
         .target = base,
         .tag = offset->as<int_const>() ? (uint32_t)offset->as<int_const>()->n : ~uint32_t{},
     };
+
     bld.reg.emplace<mem_read>(load);
     bld.state.mem = load;
 

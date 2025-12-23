@@ -16,10 +16,10 @@ static_assert(nodegen<loop_node>);
 inline value const *loop_node::infer(type_storage const &types) const
 {
     // TODO: hack
-    return bot_type::self();
+    return top_type::self();
 }
 
 inline entt::entity loop_node::emit(builder &bld, value const *val) const
 {
-    return bld.make(val, node_op::Loop);
+    return bld.make(val, node_op::Loop, {});
 }

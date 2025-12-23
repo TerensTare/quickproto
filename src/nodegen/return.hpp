@@ -52,7 +52,7 @@ inline entt::entity return_node::emit(builder &bld, value const *val) const
     if (values[0] == entt::null)
     {
         // TODO: is this correct?
-        return bld.make(val, node_op::Return);
+        return bld.make(val, node_op::Return, {});
     }
 
     // TODO: is this correct?

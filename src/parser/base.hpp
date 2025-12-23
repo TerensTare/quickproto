@@ -2,7 +2,6 @@
 #pragma once
 
 #include <algorithm>
-#include <charconv>
 
 #include "nodegen/all.hpp"
 #include "env.hpp"
@@ -96,6 +95,18 @@ enum class parse_prec : uint8_t
     Factor,     // * /
 };
 
+enum class assign_index : uint32_t
+{
+    none = ~uint32_t{},
+};
+
+struct expr_info final
+{
+    entt::entity node;
+    assign_index assign = assign_index::none;
+    // ^ The `name_index` for the base `value` of the expression if assignable; `none` otherwise
+};
+
 struct parser final
 {
     using block_then = function_ref<entt::entity(scope const *, entt::entity)>;
@@ -105,23 +116,23 @@ struct parser final
     // post_expr(base) ::= call(base) | index(base) | member(base) | base
     // ^ie. it's `base` + any possible rule following it
     [[nodiscard]]
-    inline entt::entity post_expr(entt::entity base) noexcept;
+    inline expr_info post_expr(expr_info base) noexcept;
 
     // call(base) ::= post_expr( base '(' expr,*,? ')' )
     // ^ meaning this rule will parse a call, then invoke `post_expr` with the parsed call as `base`
     [[nodiscard]]
-    inline entt::entity call(entt::entity base) noexcept;
+    inline expr_info call(expr_info base) noexcept;
 
     // index(base) ::= post_expr( base '[' expr ']' )
     // ^ meaning this rule will parse an index, then invoke `post_expr` with the parsed index as `base`
     [[nodiscard]]
-    inline entt::entity index(entt::entity base) noexcept;
+    inline expr_info index(expr_info base) noexcept;
 
     // TODO: add support for methods
     // member(base) ::= post_expr( base '.' <ident> )
     // ^ meaning this rule will parse a member, then invoke `post_expr` with the parsed index as `base`
     [[nodiscard]]
-    inline entt::entity member(entt::entity base) noexcept;
+    inline expr_info member(expr_info base) noexcept;
 
     // primary ::= 'true'
     //           | 'false'
@@ -133,18 +144,19 @@ struct parser final
     // <unary_op> ::= '!' | '-' | '*' | '&'
     // ^ this means that the `post_expr` recursion will apply IFF <ident> is followed by `(`, `[` or `.`
     [[nodiscard]]
-    inline entt::entity primary() noexcept;
+    inline expr_info primary() noexcept;
 
     // expr ::= primary ( <binary_op> expr(<binary_op-prec>) )*
     // <binary_op> ::= '||' | '&&' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '+' | '-' | '*' | '/' | '&' | '^' | '|'
     // ^ how much is parsed by a specific call to `expr` depends on the precedence level parsed
     [[nodiscard]]
-    inline entt::entity expr(parse_prec prec = parse_prec::None) noexcept;
+    inline expr_info expr(parse_prec prec = parse_prec::None) noexcept;
 
     // stmt
     // - the entity returned is the node of the `return` statement in this block, if any; `null` otherwise
     // ^ if a `continue` or `break` statement is reached before a `return` (not in a nested block), but on this block, the return is also `null` as the statement is unreachable
-    // - also note that any of these functions will fully parse the remaining of the containing block for performance reasons
+    // - note that any of these functions will fully parse the remaining of the containing block for performance reasons
+    // - also note that these rules don't return an `expr_info` as we don't care about the extra information on it, we only need the resulting node
 
     // <ident>,+ ':=' expr,+ ';' stmt
     [[nodiscard]]
@@ -152,16 +164,16 @@ struct parser final
     // expr '=' expr ';' stmt
     // HACK: can you merge this with `compound_assign`?
     [[nodiscard]]
-    inline entt::entity assign(entt::entity lhs) noexcept;
+    inline entt::entity assign(expr_info lhs) noexcept;
 
     // expr comp_op expr ';' stmt
     // comp_op ::= '+=' | '-=' | '*=' | '/=' | '&=' | '^=' | '|='
     [[nodiscard]]
-    inline entt::entity compound_assign(entt::entity lhs) noexcept;
+    inline entt::entity compound_assign(expr_info lhs) noexcept;
     // expr post_op ';' stmt
     // post_op ::= '++' | '--'
     [[nodiscard]]
-    inline entt::entity post_op(entt::entity lhs) noexcept;
+    inline entt::entity post_op(expr_info lhs) noexcept;
 
     // 'defer' call ';' stmt
     [[nodiscard]]
@@ -174,11 +186,12 @@ struct parser final
     // ^ ie. right now this only parses a `while`-like for loop
     [[nodiscard]]
     inline entt::entity for_stmt() noexcept;
-    // break_stmt | continue_stmt
-    //  break_stmt    ::= 'break' <ident>? ';' stmt
-    //  continue_stmt ::= 'continue' <ident>? ';' stmt
+    // 'break' <ident>? ';' stmt
     [[nodiscard]]
-    inline entt::entity control_flow(token_kind which) noexcept;
+    inline entt::entity break_stmt() noexcept;
+    // 'continue' <ident>? ';' stmt
+    [[nodiscard]]
+    inline entt::entity continue_stmt() noexcept;
     // 'return' expr,* ';' stmt
     [[nodiscard]]
     inline entt::entity return_stmt() noexcept;
@@ -219,8 +232,6 @@ struct parser final
 
     // decl
 
-    // 'const' <ident> '=' expr ';' decl
-    inline void const_decl() noexcept;
     // 'func' <ident> '(' param_decl,*, ')' type? block ';' decl
     inline void inline_func_decl() noexcept;
     // '@' 'extern' 'func' <ident> '(' param_decl,*, ')' type? ';' decl
@@ -228,6 +239,9 @@ struct parser final
     // HACK: handle `extern` just like other annotations
     inline void extern_func_decl() noexcept;
 
+    // 'const' <ident> '=' expr ';' decl
+    // TODO: make this a statement too
+    inline void const_decl() noexcept;
     // 'var' <ident> type '=' expr ';' stmt-or-decl
     // if parsed inside a block, this is treated as a statement and is followed by a `stmt` rather than a decl
     template <bool AsStmt>
@@ -269,7 +283,7 @@ private:
     // | type '(' expr ')'
     // | ident
     [[nodiscard]]
-    inline entt::entity type_expr_or_ident() noexcept;
+    inline expr_info type_expr_or_ident() noexcept;
 
     // <ident> type
     // i is the index of the parameter in the function declaration (used by the Proj node emitted for the parameter)
@@ -366,7 +380,7 @@ inline entt::entity parser::phi(entt::entity old, entt::entity lhs, entt::entity
 
     // TODO: specify the type of this node
     // HACK: generalize the value
-    auto const ret = bld.make(int_bot::self(), node_op::Phi, ins);
+    auto const ret = bld.make(int_top::self(), node_op::Phi, ins);
     (void)bld.reg.emplace<region_of_phi>(ret, old); // TODO: specify the actual region here and run passes
 
     return ret;

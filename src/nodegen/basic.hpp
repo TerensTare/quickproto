@@ -32,7 +32,7 @@ struct type_error final
     inline entt::entity emit(builder &bld, value const *val) const
     {
         // TODO: figure out the exact type of this node
-        auto const n = bld.make(val, node_op::Error);
+        auto const n = bld.make(val, node_op::Error, {});
         (void)bld.reg.emplace<error_node>(n);
         return n;
     }
@@ -61,7 +61,7 @@ inline entt::entity value_node::emit(builder &bld, value const *val) const
                           ? node_op::FConst
                           : node_op::BConst;
 
-    return bld.make(val, kind);
+    return bld.make(val, kind, {});
 }
 
 static_assert(nodegen<value_node>);
@@ -76,7 +76,7 @@ inline entt::entity make(builder &bld, Gen const &gen)
     // ^ the `node_span` of `make(children...)` is `join(first, last)`
     auto val = gen.infer(bld.reg.storage<node_type>());
     if (auto err = val->as<value_error>())
-        return make(bld, type_error{err});
+        return type_error{err}.emit(bld, err); // NOTE: `make` is not used here to avoid the recursive call
 
     if (val->is_const())
         return value_node{val}.emit(bld, val); // NOTE: `make` is not used here to avoid the recursive call + type checks
@@ -94,7 +94,10 @@ inline entt::entity make(builder &bld, Gen const &gen)
         // TODO: set the target here; for alloca/callstatic it is the function Start
         // TODO: update this to reflect the changes
         // TODO: set the tag
-        bld.reg.emplace<mem_effect>(n) = {.target = bld.state.func};
+        bld.reg.emplace<mem_effect>(n) = {
+            .prev = bld.state.mem,
+            .target = bld.state.func,
+        };
         bld.reg.emplace<mem_read>(n);
         bld.state.mem = n;
     }
@@ -104,7 +107,10 @@ inline entt::entity make(builder &bld, Gen const &gen)
         // TODO: set the target here; for alloca/callstatic it is the function Start
         // TODO: update this to reflect the changes
         // TODO: set the tag
-        bld.reg.emplace<mem_effect>(n) = {.target = bld.state.func};
+        bld.reg.emplace<mem_effect>(n) = {
+            .prev = bld.state.mem,
+            .target = bld.state.func,
+        };
         bld.reg.emplace<mem_write>(n);
         bld.state.mem = n;
     }

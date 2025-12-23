@@ -13,9 +13,13 @@ struct type
 
     // the "unknown" representation of the type; nothing can be assumed about this value
     virtual value const *top() const noexcept = 0;
+    // the default-init value for the type's instance
+    virtual value const *zero() const noexcept = 0;
+
+    virtual char const *name() const noexcept = 0;
 
     template <typename T>
-    inline type const *as() const noexcept
+    inline T const *as() const noexcept
     {
         static_assert(std::derived_from<T, decltype(auto(*this))>);
         return dynamic_cast<T const *>(this);

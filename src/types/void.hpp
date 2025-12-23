@@ -8,6 +8,9 @@ struct void_type final : type
 {
     // TODO: fix this
     inline value const *top() const noexcept;
+    inline value const *zero() const noexcept;
+
+    inline char const *name() const noexcept { return "void"; }
 };
 
 struct void_value final : value
@@ -17,8 +20,7 @@ struct void_value final : value
         static void_value vty;
         return &vty;
     }
-
-    inline char const *name() const noexcept { return "void"; }
 };
 
 inline value const *void_type::top() const noexcept { return void_value::self(); }
+inline value const *void_type::zero() const noexcept { return void_value::self(); }

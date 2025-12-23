@@ -4,39 +4,6 @@
 #include "parser/base.hpp"
 #include "opt/all.hpp"
 
-// TODO: move the `type` rules to a separate file
-
-inline void parser::const_decl() noexcept
-{
-    eat(token_kind::KwConst);                 // 'const'
-    auto const name = eat(token_kind::Ident); // <ident>
-    eat(token_kind::Equal);                   // '='
-    auto const init = expr();                 // expr
-    eat(token_kind::Semicolon);               // ;
-
-    // TODO: link a `Proj` node from the global `State`
-    // TODO: typecheck in case the type is specified
-    // entt::entity const ins[]{init};
-    // auto const store = bld.make(node_op::Store, ins);
-    // auto &&ty = bld.reg.get<node_type>(store).type;
-    // bld.reg.get<node_type>(store).type = new const_type{ty};
-    // bld.reg.get_or_emplace<effect>(store).target = mem_state;
-    // mem_state = store;
-
-    // TODO: mark the name as non-modifiable somehow
-    env.new_value(name.hash, init);
-
-    // NOTE: no need to prune dead code here, everything is done at compile time
-
-    // TODO: `prune_dead_code` is common for every declaration, find a way to address this
-    // ^ merge `prune_dead_code` and `decl` so you don't jump around; make sure it's a tail call
-    // NOTE: you still need to prune here to cut temporary nodes
-    prune_dead_code(bld, init);
-
-    // TODO: inline CPS this
-    decl();
-}
-
 inline void parser::inline_func_decl() noexcept
 {
     // TODO: is this correct?
@@ -70,9 +37,6 @@ inline void parser::inline_func_decl() noexcept
     scope s{.prev = env.top};
     env.top = &s;
 
-    // TODO: environment pointer should be restored to before parameters, not after
-    // ^ also declare the function name before params; the environment should contain it
-    // ^ or rather just mark it as unresolved and resolve it later
     // TODO: parse the parameters + return in a separate function, return the node id
 
     // param_decl,*,?
@@ -224,7 +188,36 @@ inline void parser::extern_func_decl() noexcept
     // TODO: is this correct?
     bld.pop_vis();
 
-    decl(); // TODO: maybe call this inside the `block`?
+    decl();
+}
+
+inline void parser::const_decl() noexcept
+{
+    eat(token_kind::KwConst);                 // 'const'
+    auto const name = eat(token_kind::Ident); // <ident>
+    eat(token_kind::Equal);                   // '='
+    auto const init = expr().node;            // expr
+    eat(token_kind::Semicolon);               // ;
+
+    // TODO: link a `Proj` node from the global `State`
+    // TODO: typecheck in case the type is specified
+    // entt::entity const ins[]{init};
+    // auto const store = bld.make(node_op::Store, ins);
+    // auto &&ty = bld.reg.get<node_type>(store).type;
+    // bld.reg.get<node_type>(store).type = new const_type{ty};
+    // bld.reg.get_or_emplace<effect>(store).target = mem_state;
+    // mem_state = store;
+
+    // TODO: mark the name as non-modifiable somehow
+    env.new_value(name.hash, init);
+
+    // TODO: `prune_dead_code` is common for every declaration, find a way to address this
+    // ^ merge `prune_dead_code` and `decl` so you don't jump around; make sure it's a tail call
+    // NOTE: you still need to prune here to cut temporary nodes
+    prune_dead_code(bld, init);
+
+    // TODO: inline CPS this
+    decl();
 }
 
 template <bool AsStmt>
@@ -236,7 +229,7 @@ inline auto parser::var_decl() noexcept -> std::conditional_t<AsStmt, decltype(s
     auto const name = eat(token_kind::Ident); // <ident>
     auto const ty = type();                   // type
     eat(token_kind::Equal);                   // '='
-    auto const init = expr();                 // expr
+    auto const init = expr().node;            // expr
     eat(token_kind::Semicolon);               // ;
 
     // codegen
@@ -395,12 +388,21 @@ inline void parser::package() noexcept
 
     // TODO: correctly represent this
     // TODO: recheck the node's value
-    bld.pkg_mem = bld.make(bot_type::self(), node_op::Program);
-    bld.glob_mem = bld.make(bot_type::self(), node_op::Global);
+    // TODO: these should be top
+    bld.pkg_mem = bld.make(top_type::self(), node_op::Program, {});
+    bld.glob_mem = bld.make(top_type::self(), node_op::Global, {});
+    // TODO: is this correct?
+    bld.state = {
+        .func = bld.glob_mem,
+        .ctrl = bld.pkg_mem,
+        .mem = bld.glob_mem,
+    };
+
     bld.reg.emplace<mem_effect>(bld.glob_mem);
     // TODO: read/write tag
 
-    (void)bld.new_func();
+    // TODO: do you need a new scope here?
+    // (void)bld.new_func();
 
     decl(); // decl*
 }
@@ -418,10 +420,11 @@ inline ::type const *parser::param_decl(int64_t i) noexcept
 
     // TODO: recheck this
     // TODO: figure out the exact type of this
-    auto const node = bld.make(ty->top(), node_op::Proj);
+    auto const node = bld.make(ty->top(), node_op::Proj, {});
     // TODO: recheck this
     // TODO: this variable should increment the scope's counter
     bld.reg.emplace<mem_effect>(node) = {
+        .prev = bld.state.func,
         .target = bld.state.func,
         .tag = (uint32_t)i, // TODO: uniform integer type
     };
@@ -430,67 +433,6 @@ inline ::type const *parser::param_decl(int64_t i) noexcept
     env.new_value(nametok.hash, node);
 
     return ty;
-}
-
-inline ::type const *parser::type() noexcept
-{
-    // TODO: mark the type node if not declared yet
-    // TODO: inline CPS this
-    switch (scan.peek.kind)
-    {
-    case token_kind::LeftBracket:
-        return array_type();
-
-    case token_kind::Star:
-        return pointer_type();
-
-    case token_kind::Ident:
-        return named_type();
-
-    default:
-        fail(scan.peek, "Expected `[' or <identifier>");
-        return nullptr;
-    }
-}
-
-inline ::type const *parser::array_type() noexcept
-{
-    // TODO: allow deduced-size arrays for things like initializers and casts
-
-    // TODO: inline the check on `eat`
-    eat(token_kind::LeftBracket);                // '['
-    auto const n_tok = eat(token_kind::Integer); // <integer>
-    eat(token_kind::RightBracket);               // ']'
-
-    auto const txt = scan.lexeme(n_tok);
-
-    uint64_t n{};
-    std::from_chars(txt.data(), txt.data() + txt.size(), n);
-
-    auto base = type(); // TODO: you can CPS this and pass a `then` call that is propagated up to `named_type`
-    return new ::array_type{base, n};
-}
-
-inline ::type const *parser::pointer_type() noexcept
-{
-    eat(token_kind::Star); // '*'
-    auto sub = type();     // type
-
-    return new ::pointer_type{sub};
-}
-
-inline ::type const *parser::named_type() noexcept
-{
-    // TODO: inline the check of `eat`
-    auto const nametok = eat(token_kind::Ident); // type
-
-    // TODO: make this into a function
-    auto const index = env.get_name(nametok.hash);
-
-    // TODO: if the name is not declared yet, this still returns nullptr, is this correct?
-    return (uint32_t(index) & uint32_t(name_index::type_mask))
-               ? env.get_type(index)
-               : nullptr;
 }
 
 // codegen helpers
@@ -513,18 +455,15 @@ inline void parser::codegen_main() noexcept
     // TODO: do something better for lookup here
     auto const main_iter = env.top->table.find((hashed_name)(uint32_t)"main"_hs);
     ensure(main_iter != env.top->table.end(), "Program does not define a `main` function!");
+
     auto const main_node = env.values[(uint32_t)main_iter->second];
     auto const main_ty = bld.reg.get<node_type const>(main_node).type;
     ensure(main_ty->as<func>(), "`main` should be a function!");
+    // HACK: check the type instead
+    ensure(main_ty->as<func>()->ret->as<void_value>(), "`main` cannot return a value!");
 
     // TODO: should you pass `main_node` to the inputs of the function?
-    entt::entity const main_ins[]{entt::null};
-    auto const call_main = make(bld, call_node{
-                                         .func = main_node,
-                                         .args = std::span(main_ins, 0),
-                                     });
-    // HACK: check the type instead
-    ensure(bld.reg.get<node_type>(call_main).type->as<void_value>(), "Function `main` cannot return a value!");
+    auto const call_main = make(bld, call_node{.func = main_node});
 
     // TODO: is this correct?
     auto const exit = make(bld, exit_node{.code = 0});

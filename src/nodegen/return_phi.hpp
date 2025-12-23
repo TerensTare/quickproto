@@ -20,7 +20,7 @@ static_assert(nodegen<return_phi_node>);
 inline value const *return_phi_node::infer(type_storage const &types) const
 {
     // TODO: find a better type instead
-    return bot_type::self();
+    return top_type::self();
 }
 
 inline entt::entity return_phi_node::emit(builder &bld, value const *val) const

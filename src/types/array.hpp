@@ -8,25 +8,36 @@
 // TODO: also store a `common type` for fast computations
 // TODO: remember you will probably have runtime-sized arrays at some point
 
-struct different_size_array final : value_error
-{
-    inline different_size_array(size_t lhs, size_t rhs)
-        : lhs{lhs}, rhs{rhs} {}
-
-    inline char const *name() const noexcept { return "<different-size-array>"; }
-
-    size_t lhs, rhs;
-};
-
 struct array_type final : type
 {
     inline array_type(type const *base, size_t n) noexcept
         : base{base}, n{n} {}
 
     inline value const *top() const noexcept;
+    inline value const *zero() const noexcept;
+
+    // TODO: denote the name better
+    inline char const *name() const noexcept { return "{array}"; }
 
     type const *base;
     size_t n; // number of elements; for now this must be known at compile time
+};
+
+struct different_size_array final : value_error
+{
+    inline different_size_array(size_t lhs, size_t rhs)
+        : lhs{lhs}, rhs{rhs} {}
+
+    size_t lhs, rhs;
+};
+
+struct out_of_bounds final : value_error
+{
+    inline out_of_bounds(array_type const *type, int_const const *index)
+        : type{type}, idx{index} {}
+
+    array_type const *type;
+    int_const const *idx;
 };
 
 struct array_value final : value
@@ -50,21 +61,26 @@ struct array_value final : value
         // }
         // else
         // TODO: implement
-            return value::assign(rhs);
+        return value::assign(rhs);
     }
 
     inline value const *index(value const *i) const noexcept
     {
-        // NOTE: this assumes `i` is within bounds, which should be checked before calling this operation
-        return i->as<int_value>()
-                   ? type->base->top()
-                   : value::index(i);
-    }
+        if (auto int_i = i->as<int_value>())
+        {
+            // TODO: handle the runtime-sized array case
+            if (auto c_i = int_i->as<int_const>(); c_i->n >= type->n)
+                return new out_of_bounds{type, c_i};
 
-    // TODO: return a better name
-    inline char const *name() const noexcept { return "<array>"; }
+            return type->base->top();
+        }
+        else
+            return value::index(i);
+    }
 
     array_type const *type;
 };
 
 inline value const *array_type::top() const noexcept { return new array_value{this}; }
+// TODO: every index should be zero-init instead; address this
+inline value const *array_type::zero() const noexcept { return new array_value{this}; }

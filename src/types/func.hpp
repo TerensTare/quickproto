@@ -12,8 +12,6 @@ struct bad_args_count final : value_error
     inline bad_args_count(size_t expected, size_t got)
         : expected{expected}, got{got} {}
 
-    inline char const *name() const noexcept { return "<bad-args-count>"; }
-
     size_t expected, got;
 };
 
@@ -35,9 +33,6 @@ struct func final : value
         return ret;
     }
 
-    // TODO: print concrete type instead
-    inline char const *name() const noexcept final { return "func"; }
-
     bool is_extern = false;
     value const *ret;
     size_t n_params;
@@ -57,6 +52,19 @@ struct func_type final : type
 
         return new func{is_extern, ret->top(), n_params, std::move(args)};
     }
+
+    inline value const *zero() const noexcept
+    {
+        auto args = std::make_unique<value const *[]>(n_params);
+        for (size_t i{}; i < n_params; ++i)
+            args[i] = params[i]->zero();
+
+        // TODO: this should be a null pointer instead; address this
+        return new func{is_extern, ret->zero(), n_params, std::move(args)};
+    }
+
+    // TODO: give out the full name of the func
+    inline char const *name() const noexcept { return "func"; }
 
     bool is_extern;
     type const *ret;

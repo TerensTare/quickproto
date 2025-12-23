@@ -43,7 +43,7 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
         return named_node("Return");
     // HACK: use a separate function to print the type
     case node_op::Exit:
-        return std::format_to(out, "[label=\"Exit({})\"]", type.type->as<int_const>()->n);
+        return named_node("Exit"); // TODO: show the exit code if possible
 
         // HACK: use a separate function to print the type
     case node_op::Proj:
@@ -168,7 +168,11 @@ inline void dot_backend::compile(FILE *out, entt::registry const &reg)
 
     // TODO: do you really need to show memory effect nodes?
     for (auto [dep, in] : reg.storage<mem_effect>()->each())
+    {
+        if (in.prev != entt::null)
+            std::println(out, "  n{} -> n{} [color=blue, style=dotted];", dep, in.prev);
         std::println(out, "  n{} -> n{} [color=blue, label=\"#{}\"];", dep, in.target, in.tag);
+    }
 
     for (auto [phi, region] : reg.storage<region_of_phi>()->each())
         std::println(out, "  n{} -> n{} [style=dotted];", phi, region.region);

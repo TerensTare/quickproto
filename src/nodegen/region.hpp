@@ -22,7 +22,7 @@ static_assert(nodegen<region_node>);
 inline value const *region_node::infer(type_storage const &types) const
 {
     // TODO: find a better type instead
-    return bot_type::self();
+    return top_type::self();
 }
 
 inline entt::entity region_node::emit(builder &bld, value const *val) const

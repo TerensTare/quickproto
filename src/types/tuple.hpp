@@ -8,8 +8,6 @@
 
 struct tuple : value
 {
-    // TODO: print concrete type instead
-    inline char const *name() const noexcept final { return "tuple"; }
 };
 
 struct tuple_top : tuple

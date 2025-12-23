@@ -19,11 +19,11 @@ static_assert(nodegen<exit_node>);
 
 inline value const *exit_node::infer(type_storage const &types) const
 {
-    // TODO: use another value for the node, because it gets cut off from const folding
-    return int_const::make(code);
+    // HACK: use another type for this node
+    return int_top::self();
 }
 
 inline entt::entity exit_node::emit(builder &bld, value const *val) const
 {
-    return bld.make(val, node_op::Exit);
+    return bld.make(val, node_op::Exit, {});
 }

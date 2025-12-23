@@ -12,8 +12,6 @@ struct variable_member_access final : value_error
 {
     inline variable_member_access(value const *val, value const *index) : val{val}, index{index} {}
 
-    inline char const *name() const noexcept { return "<variable-member-access>"; }
-
     value const *val;
     value const *index;
 };
@@ -27,9 +25,6 @@ struct struct_value : value
         : type{type} {}
 
     inline value const *index(value const *i) const noexcept;
-
-    // TODO: provide a better name
-    inline char const *name() const noexcept { return "<struct>"; }
 
     struct_type const *type;
     // TODO: you probably need to keep a list of member values for optimizations
@@ -47,6 +42,11 @@ struct struct_type final : type
         : n_members{n_members}, members(std::move(members)) {}
 
     inline value const *top() const noexcept { return new struct_value{this}; }
+    // TODO: every field should be zero-init instead; address this
+    inline value const *zero() const noexcept { return new struct_value{this}; }
+
+    // TODO: show the actual name of the struct
+    inline char const *name() const noexcept { return "{struct}"; }
 
     size_t n_members;
     std::unique_ptr<member_decl[]> members;
