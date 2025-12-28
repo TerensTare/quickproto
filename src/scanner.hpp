@@ -5,29 +5,15 @@
 #include <unordered_map>
 
 #include "token.hpp"
+#include "utils/uchars.hpp"
 
 // TODO:
+// - flag identifiers that start as uppercase
 // - parse integer values as `uint64`, then add `truncate` nodes if specified type is smaller
 // ^ what about negative numbers though?
 // ^ not a problem as initially `-` and `{integer}` are separate tokens
 // ^ repeat the same logic for floating points with `float64`, and also for assigning int constants to floating values
-
-constexpr bool is_alpha(char ch) noexcept
-{
-    return (ch >= 'A' && ch <= 'Z') ||
-           (ch >= 'a' && ch <= 'z') ||
-           (ch == '_');
-}
-
-constexpr bool is_dec(char ch) noexcept
-{
-    return ch >= '0' && ch <= '9';
-}
-
-constexpr bool is_alphanum(char ch) noexcept
-{
-    return is_alpha(ch) || is_dec(ch);
-}
+// - keep track of the whole text size (you already have it) and the remaining characters, so you can do vectorized search
 
 struct scanner final
 {
@@ -35,10 +21,10 @@ struct scanner final
 
     constexpr auto lexeme(token const &t) const noexcept -> std::string_view
     {
-        return {text + t.start, t.len};
+        return {(char const *)text + t.start, t.len};
     }
 
-    char const *text;
+    uchar const *text;
     token peek = bootstrap();
 
 private:
@@ -51,23 +37,22 @@ private:
 
 struct scanner_iter final
 {
+    inline token_kind next() noexcept;
+
+    // TODO: do you need this anymore?
+    constexpr bool eat(uchar c) noexcept { return text.eat(c); }
+
+    // helper rules
     template <bool InsertSemicolon>
     inline void skip_ws() noexcept;
 
-    inline token_kind next() noexcept;
+    // bin ::= '0' ('b' | 'B') b* - where b ::= '0' | '1'
+    // oct ::= '0' ('o' | 'O')? o* - where o ::= '0'-'7'
+    // hex ::= '0' ('x' | 'X') h* - where h ::= '0'-'9' | 'a'-'f' | 'A'-'F'
+    // flt ::= '0' '.' d* - where d ::= '0'-'9'
+    inline token_kind zero_rule() noexcept;
 
-    constexpr bool eat(char c) noexcept
-    {
-        if (*text == c)
-        {
-            ++text;
-            return true;
-        }
-        else
-            return false;
-    }
-
-    char const *text;
+    uchars text;
 };
 
 // TODO: try this vs entt::dense_map
@@ -83,6 +68,7 @@ inline static std::unordered_map<std::string_view, token_kind> const keywords{
     {"if", token_kind::KwIf},
     {"nil", token_kind::KwNil},
     {"package", token_kind::KwPackage},
+    {"range", token_kind::KwRange},
     {"return", token_kind::KwReturn},
     {"struct", token_kind::KwStruct},
     {"true", token_kind::KwTrue},
@@ -126,24 +112,27 @@ inline token scanner::next() noexcept
         ? iter.skip_ws<true>()
         : iter.skip_ws<false>();
 
-    auto const start = uint32_t(iter.text - text);
+    auto const start = uint32_t(iter.text.chars - text);
     auto const next = iter.next();
 
     peek = token{
         .kind = next,
         .start = start,
-        .len = uint32_t(iter.text - text) - start,
+        .len = uint32_t(iter.text.chars - text) - start,
     };
 
     // TODO: do something more efficient
     // probably best to take care of this branch when parsing the token kind (you are double checking here)
     if (peek.kind == token_kind::Ident)
     {
+        // invariant: you know identifiers are always ascii
         auto const str = lexeme(peek);
+
         peek.hash = (hashed_name)(uint32_t)entt::hashed_string::value(str.data(), str.size());
 
         // TODO: use the hash here (maybe) keep a simple array and match?
         // ^ or rather, keep 2 arrays; one for the hashes one for the kind
+
         if (auto const iter = keywords.find(str); iter != keywords.end())
         {
             peek.kind = iter->second;
@@ -162,15 +151,20 @@ inline void scanner_iter::skip_ws() noexcept
         return;
 
     case '/':
-        switch (text[1])
+        text.next_ascii();
+
+        switch (*text)
         {
         case '/':
-            text += 2; // '//'
+            text.next_ascii(); // '//'
             goto line_comment;
+
         case '*':
-            text += 2; // '/*'
+            text.next_ascii(); // '/*'
             goto multiline_comment;
+
         default:
+            --text.chars;
             return;
         }
 
@@ -184,7 +178,7 @@ inline void scanner_iter::skip_ws() noexcept
 
         if (*text <= ' ')
         {
-            ++text;
+            text.next_ascii();
 
             while (*text <= ' ')
             {
@@ -195,7 +189,7 @@ inline void scanner_iter::skip_ws() noexcept
                         return;
                 }
 
-                ++text;
+                text.next_ascii();
             }
 
             return skip_ws<InsertSemicolon>();
@@ -209,6 +203,7 @@ inline void scanner_iter::skip_ws() noexcept
 line_comment:
     while (true)
     {
+        // TODO: only ascii bytes ever have the leading 0, so is it ever better here to just do a linear scan and avoid the variable step?
         switch (*text)
         {
         case '\n':
@@ -218,7 +213,7 @@ line_comment:
 
             else
             {
-                ++text;
+                text.next_ascii();
                 // invariant: this is unreachable when `InsertSemicolon` is `true`
                 return skip_ws<false>();
             }
@@ -227,30 +222,131 @@ line_comment:
             return;
 
         default:
-            ++text;
+            text.next_utf8();
         }
     }
 
 multiline_comment:
-    const char *next = nullptr;
-    while (next = strchr(text, '*'))
+    // TODO: optimize this
+    // TODO: only ascii bytes ever have the leading 0, so is it ever better here to just do a linear scan and avoid the variable step?
+    switch (*text)
     {
-        text = next + 1;
-        if (*text == '/')
-        {
-            ++text;
+    case '\0':
+        return;
+
+    case '*':
+        text.next_ascii();
+        if (text.eat('/'))
             return skip_ws<InsertSemicolon>();
+
+        goto multiline_comment;
+
+    default:
+        text.next_utf8();
+        goto multiline_comment;
+    }
+}
+
+inline token_kind scanner_iter::zero_rule() noexcept
+{
+    using enum token_kind;
+
+    // TODO: parse _ in between
+    switch (*text)
+    {
+        // binary
+    case 'b':
+    case 'B':
+    {
+        text.next_ascii();
+
+        // binary
+        while (is_bin(*text))
+            text.next_ascii();
+
+        // TODO: is this correct? (any other characters that trigger the error?)
+        if (is_hex(*text))
+        {
+            do
+                text.next_ascii();
+            while (is_hex(*text));
+
+            return BadDigit;
         }
+
+        return Integer;
     }
 
-    text += strlen(text); // TODO: does this go to '\0'?
+    // hex
+    case 'x':
+    case 'X':
+    {
+        text.next_ascii();
+
+        // hex
+        while (is_hex(*text))
+            text.next_ascii();
+
+        // TODO: report bad characters
+
+        return Integer;
+    }
+
+    // flt
+    case '.':
+    {
+        // TODO: scientific notation, etc.
+        text.next_ascii();
+
+        while (is_dec(*text))
+            text.next_ascii();
+
+        return Decimal;
+    }
+
+    // oct
+    case 'o':
+    case 'O':
+        text.next_ascii(); // o/O
+
+        if (is_oct(*text))
+            goto oct;
+        else // there should be at least 1 octal digit after the o/O
+            return BadBase;
+
+    default:
+        if (is_oct(*text))
+            goto oct;
+        else if (is_hex(*text))
+            return BadBase;
+        else
+            return Integer; // just 0
+    }
+
+oct:
+    // octal
+    do
+        text.next_ascii();
+    while (is_oct(*text));
+
+    // TODO: is this correct? (any other characters that trigger the error?)
+    if (is_hex(*text))
+    {
+        do
+            text.next_ascii();
+        while (is_hex(*text));
+
+        return BadDigit;
+    }
+
+    return Integer;
 }
 
 inline token_kind scanner_iter::next() noexcept
 {
     using enum token_kind;
 
-    switch (auto ch = *text++; ch)
+    switch (auto ch = text.next_ascii(); ch)
     {
     case '\0':
         return Eof;
@@ -338,36 +434,116 @@ inline token_kind scanner_iter::next() noexcept
                    ? XorEqual
                    : Xor;
 
-    case '"':
-        // TODO: error on newline
-        while (*text && *text != '"')
-            ++text;
+    // TODO: handle escape sequences (\x, \u)
+    case '\'':
+        // TODO: probably best to make this into a function to reuse for strings
+        switch (*text)
+        {
+        case '\0':
+            return LongRune;
 
-        return String;
+            // TODO: if ', error because of empty rune
+
+        case '\\':
+            text.next_ascii();
+            // TODO: implement
+            switch (*text) {}
+            break;
+
+        default:
+            text.next_utf8();
+        }
+
+        return eat('\'') ? Rune : LongRune;
+
+    case '"':
+        // TODO: optimize this
+        // TODO: only ascii bytes ever have the leading 0, so is it ever better here to just do a linear scan and avoid the variable step?
+        // TODO: handle escape sequences (\", \u, \x, \0-7)
+        while (true)
+        {
+            switch (*text)
+            {
+            case '\n':
+                text.next_ascii();
+                [[fallthrough]];
+
+            case '\0':
+                return UnclosedString;
+
+            case '"':
+                text.next_ascii();
+                return String;
+
+            default:
+                text.next_utf8();
+            }
+        }
+
+    // TODO: parse other integer literals (octal, hex)
+    // TODO: maybe it's best to lex the number on the go as you need to handle the `_` and keep it in the hash?
+    // TODO: move this to a separate function
+    case '0':
+        return zero_rule();
 
     default:
         if (is_alpha(ch))
         {
-            while (is_alphanum(*text))
-                ++text;
+            // TODO: can you optimize this further?
+            token_kind ret = Ident;
 
-            return Ident;
+            // TODO: is it best to have separate loops for this?
+            while (auto ch = *text)
+            {
+                if (is_alphanum(ch))
+                    text.next_ascii();
+                else if (is_utf8(ch))
+                {
+                    ret = UnicodeIdent;
+                    text.next_utf8();
+                }
+                else
+                    break;
+            }
+
+            return ret;
         }
-        else if (is_dec(ch))
+        else if (is_dec(ch)) // invariant: ch is never 0 here
         {
             while (is_dec(*text))
-                ++text;
+                text.next_ascii();
 
             if (eat('.'))
             {
                 while (is_dec(*text))
-                    ++text;
+                    text.next_ascii();
+
+                // TODO: handle scientific notation
+
+                if (is_hex(*text))
+                {
+                    do
+                        text.next_ascii();
+                    while (is_hex(*text));
+
+                    return BadDigit;
+                }
 
                 return Decimal;
+            }
+            else if (is_hex(*text))
+            {
+                do
+                    text.next_ascii();
+                while (is_hex(*text));
+
+                return BadDigit;
             }
 
             return Integer;
         }
+        else if (is_utf8(ch)) // if UTF8, correctly go to the next character and return unknown either way, as UTF8 characters are only valid in comments or strings.
+            text.chars += utf8_step(ch) - 1;
 
         return Unknown;
     }

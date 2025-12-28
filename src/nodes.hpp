@@ -107,6 +107,7 @@ enum class node_op : uint8_t
 
     IConst, // IConst Value=someInt
     FConst, // FConst Value=someFloat
+    SConst, // SConst Value=someString
     BConst, // BConst Value=someBool
     Error,  // TODO: temporary hack
 };

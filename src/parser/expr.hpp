@@ -6,8 +6,8 @@
 static constexpr auto prec_table = []()
 {
     std::array<parse_prec, 256> table;
-    // MSVC does not like a for loop here
-    table.fill(parse_prec::None);
+    for (size_t i{}; i < std::size(table); ++i)
+        table[i] = parse_prec::None;
 
     table[(uint8_t)token_kind::OrOr] = parse_prec::Or;
     table[(uint8_t)token_kind::AndAnd] = parse_prec::And;
@@ -107,10 +107,11 @@ inline expr_info parser::member(expr_info base) noexcept
     // codegen
 
     // HACK: handle this better
+    // TODO: handle pointers as well
     auto rawval = bld.reg.get<node_type>(base.node).type;
     auto baseval = rawval->as<struct_value>();
     if (!baseval)
-        fail(dot, "Cannot access member of type!");
+        fail(dot, "Cannot access member of type!", ""); // TODO: say something better here
 
     auto ty = baseval->type;
 
@@ -123,6 +124,9 @@ inline expr_info parser::member(expr_info base) noexcept
             break;
         }
     }
+
+    if (offset == -1)
+        fail(mem, "Member not present in type", ""); // TODO: say something better here
 
     // TODO: find a better way to represent `Load`s at known indices
     // TODO: `int_const` is int64 but `offset` is int32
@@ -163,6 +167,8 @@ inline expr_info parser::primary() noexcept
         // literal
         Integer,
         Decimal,
+        Rune,
+        String,
         KwFalse,
         KwTrue,
         KwNil,
@@ -184,8 +190,9 @@ inline expr_info parser::primary() noexcept
         auto const txt = scan.lexeme(tok);
 
         uint64_t val{};
+        // TODO: handle integer base here
         std::from_chars(txt.data(), txt.data() + txt.size(), val);
-        // HACK: figure out actual int size
+        // HACK: figure out actual int size (8/16/32/64)
         return {
             .node = make(bld, value_node{int_const::make(val)}),
             // integers are not assignable to
@@ -198,11 +205,39 @@ inline expr_info parser::primary() noexcept
         auto const txt = scan.lexeme(tok);
 
         double val{};
+        // TODO: handle decimal base here
         std::from_chars(txt.data(), txt.data() + txt.size(), val);
-        // HACK: figure out actual int size
+        // HACK: figure out actual decimal size (32/64)
         return {
             .node = make(bld, value_node{new float64{val}}),
             // decimals are not assignable to
+            .assign = assign_index::none,
+        };
+    }
+
+    case Rune:
+    {
+        // TODO: decode/unquote the rune
+        auto const txt = scan.lexeme(tok);
+        // TODO: do you normalize the rune here or later?
+
+        return {
+            .node = make(bld, value_node{new rune_value{txt[1]}}), // skip the opening `'`
+            // runes are not assignable to
+            .assign = assign_index::none,
+        };
+    }
+
+    case String:
+    {
+        // TODO: throw the string in the pool, but decode/unquote first
+        auto const txt = scan.lexeme(tok);
+        // TODO: do you normalize the string here or later?
+        // ^ when normalizing, use cow strings for efficiency
+
+        return {
+            .node = make(bld, value_node{new string_value}),
+            // strings are not assignable to
             .assign = assign_index::none,
         };
     }
@@ -431,7 +466,7 @@ inline expr_info parser::type_expr_or_ident() noexcept
         // TODO: address this
         else
         {
-            fail(nametok, "Using a name before declaration is not supported yet");
+            fail(nametok, "Using a name before declaration is not supported yet", ""); // TODO: say something better here
             return {
                 .node = entt::null,
                 .assign = assign_index::none,
@@ -472,7 +507,7 @@ inline expr_info parser::type_expr_or_ident() noexcept
 
         // HACK: do something better here
         if (!ty->as<struct_type>() && !ty->as<::array_type>())
-            fail(lbrace, "Type cannot be brace-initialized");
+            fail(lbrace, "Type cannot be brace-initialized", ""); // TODO: say something better here
 
         // TODO: construct the object (emit the Stores)
         auto const init = make(bld, alloca_node{.ty = ty});
@@ -539,7 +574,7 @@ inline expr_info parser::type_expr_or_ident() noexcept
     }
 
     default:
-        fail(scan.peek, "Expected '(` or `{` after type");
+        fail(scan.peek, "Expected '(` or `{` after type", ""); // TODO: say something better here
         return {
             .node = entt::null,
             .assign = assign_index::none,

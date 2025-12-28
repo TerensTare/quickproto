@@ -59,6 +59,8 @@ inline entt::entity value_node::emit(builder &bld, value const *val) const
                           ? node_op::IConst
                       : (val->as<float64>())
                           ? node_op::FConst
+                      : (val->as<string_value>())
+                          ? node_op::SConst
                           : node_op::BConst;
 
     return bld.make(val, kind, {});

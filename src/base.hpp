@@ -4,6 +4,9 @@
 #include <print>
 #include <stacktrace>
 
+using uchar = unsigned char;
+
+// TODO: get rid of this eventually
 [[noreturn]]
 inline void fail(char const *msg, std::stacktrace st = std::stacktrace::current()) noexcept
 {

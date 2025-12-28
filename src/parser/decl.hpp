@@ -25,7 +25,7 @@ inline void parser::inline_func_decl() noexcept
     eat(token_kind::LeftParen);            // '('
 
     if (env.top->table.contains(nametok.hash))
-        fail(nametok, "Function already defined");
+        fail(nametok, "Function already defined", ""); // TODO: say something here
 
     // TODO: should the function point to the `Start`, `Return`, or where?
     // ^ you can actually pre-define the `Return` node here, attach it to the env table, then set the node's inputs accordingly
@@ -71,7 +71,7 @@ inline void parser::inline_func_decl() noexcept
     // TODO: is this actually the `Return` node?
     auto const ret = block(noscope_t{}, [&](scope const *func_env, entt::entity ret)
                            {
-                               eat(token_kind::Semicolon); // ;
+                               rule_sep<false>(); // ';' or <end-of-file>
 
                                // TODO: handle multi-return case
                                entt::entity const params[]{ret};
@@ -126,7 +126,7 @@ inline void parser::extern_func_decl() noexcept
     eat(token_kind::At);                      // '@'
     auto const attr = eat(token_kind::Ident); // <ident>
     if ((uint32_t)attr.hash != "extern"_hs)
-        fail(attr, "Parsed unknown annotation");
+        fail(attr, "Parsed unknown annotation", ""); // TODO: say something here
 
     eat(token_kind::KwFunc);               // 'func'
     auto nametok = eat(token_kind::Ident); // ident
@@ -165,7 +165,7 @@ inline void parser::extern_func_decl() noexcept
                               // TODO: singleton
                               : new void_type{};
 
-    eat(token_kind::Semicolon); // ';'
+    rule_sep<false>(); // ';' or <end-of-file>
 
     env.top = env.top->prev;
 
@@ -174,7 +174,7 @@ inline void parser::extern_func_decl() noexcept
 
     // TODO: drop the check either from here or from env
     if (env.top->table.contains(nametok.hash))
-        fail(nametok, "Function already defined");
+        fail(nametok, "Function already defined", ""); // TODO: say something here
 
     // TODO: should the function point to the `Start`, `Return`, or where?
     // ^ you can actually pre-define the `Return` node here, attach it to the env table, then set the node's inputs accordingly
@@ -197,7 +197,8 @@ inline void parser::const_decl() noexcept
     auto const name = eat(token_kind::Ident); // <ident>
     eat(token_kind::Equal);                   // '='
     auto const init = expr().node;            // expr
-    eat(token_kind::Semicolon);               // ;
+    rule_sep<false>();                        // ';' or <end-of-file>
+    // ^ TODO: use AsStmt when enabling const declarations in function body
 
     // TODO: link a `Proj` node from the global `State`
     // TODO: typecheck in case the type is specified
@@ -227,10 +228,39 @@ inline auto parser::var_decl() noexcept -> std::conditional_t<AsStmt, decltype(s
 
     eat(token_kind::KwVar);                   // 'var'
     auto const name = eat(token_kind::Ident); // <ident>
-    auto const ty = type();                   // type
-    eat(token_kind::Equal);                   // '='
-    auto const init = expr().node;            // expr
-    eat(token_kind::Semicolon);               // ;
+    ::type const *ty = nullptr;
+    entt::entity init;
+
+    // untyped_var
+    if (scan.peek.kind == token_kind::Equal)
+    {
+        scan.next();        // '='
+        init = expr().node; // expr
+        // TODO: initialize ty to typeof(expr)
+    }
+    else
+    {
+        ty = type(); // type?
+
+        if (scan.peek.kind == token_kind::Equal)
+        {
+            // TODO: typecheck in this case using assignability
+            scan.next();        // '='
+            init = expr().node; // expr
+        }
+        else // just make the value either way, parsing then fails if an unexpected token follows
+        {
+            // HACK: handle this better
+            if (ty->as<struct_type>() || ty->as<::array_type>())
+                init = make(bld, alloca_node{ty});
+            else
+                init = make(bld, value_node{ty->zero()});
+        }
+    }
+
+    rule_sep<AsStmt>(); // ';' or <end-of-file>
+
+    // TODO: type check, if present
 
     // codegen
 
@@ -270,16 +300,16 @@ inline auto parser::type_decl() noexcept -> std::conditional_t<AsStmt, decltype(
 template <bool AsStmt>
 inline auto parser::alias_decl(token nametok) noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>
 {
-    auto ty = type();           // type
-    eat(token_kind::Semicolon); // ';'
+    auto ty = type();   // type
+    rule_sep<AsStmt>(); // ';' or <end-of-file>
 
     // codegen
 
     // TODO: check type is not already defined
     // TODO: are type names shadowed? if not, search the whole environment
     // TODO: drop the check either from here or from inside env.new_type
-    if (auto const n = env.get_name(nametok.hash); is_type(n))
-        fail(nametok, "Type is already defined!");
+    if (auto const n = env.get_name(nametok.hash); n != name_index::missing)
+        fail(nametok, "Type is already defined!", ""); // TODO: say something better here
 
     env.new_type(nametok.hash, ty);
 
@@ -327,7 +357,7 @@ inline auto parser::struct_decl(token nametok) noexcept -> std::conditional_t<As
         }
 
         default:
-            fail(scan.peek, "Expected '}' or <identifier>");
+            fail(scan.peek, "Expected '}' or <identifier>", ""); // TODO: say something better here
             return nullptr;
         }
     };
@@ -336,7 +366,7 @@ inline auto parser::struct_decl(token nametok) noexcept -> std::conditional_t<As
     eat(token_kind::KwStruct);                          // 'struct'
     eat(token_kind::LeftBrace);                         // '{'
     auto ty = parse_members(parse_members, nullptr, 0); // (member_decl ';')* '}'
-    eat(token_kind::Semicolon);                         // ';'
+    rule_sep<AsStmt>();                                 // ';' or <end-of-file>
 
     env.new_type(nametok.hash, ty);
 
@@ -371,7 +401,7 @@ inline void parser::decl() noexcept
         return codegen_main();
 
     default:
-        return fail(scan.peek, "Expected `func` or <EOF>");
+        return fail(scan.peek, "Expected `@`, `const`, `var`, `type`, `func` or <end-of-file>", ""); // TODO: say something here
     }
 }
 
@@ -404,6 +434,10 @@ inline void parser::package() noexcept
     // TODO: do you need a new scope here?
     // (void)bld.new_func();
 
+    scope global;
+    env.top = &global;
+    import_builtin(env);
+
     decl(); // decl*
 }
 
@@ -419,10 +453,8 @@ inline ::type const *parser::param_decl(int64_t i) noexcept
     // codegen
 
     // TODO: recheck this
-    // TODO: figure out the exact type of this
     auto const node = bld.make(ty->top(), node_op::Proj, {});
     // TODO: recheck this
-    // TODO: this variable should increment the scope's counter
     bld.reg.emplace<mem_effect>(node) = {
         .prev = bld.state.func,
         .target = bld.state.func,

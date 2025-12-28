@@ -37,10 +37,10 @@ inline entt::entity parser::assign(expr_info lhs) noexcept
     // codegen
 
     if (lhs.assign == assign_index::none)
-        fail(optok, "Cannot assign to expression on the left side!");
+        fail(optok, "Cannot assign to expression on the left side!", ""); // TODO: say something better here
 
     auto const store = make(bld, store_node{
-                                    //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
+                                     //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
                                      .lhs = lhs.node,
                                      .rhs = rhs,
                                  });
@@ -92,10 +92,10 @@ inline entt::entity parser::compound_assign(expr_info lhs) noexcept
             : make(bld, bit_or_node{lhs.node, rhs});
 
     if (lhs.assign == assign_index::none)
-        fail(full_optok, "Cannot assign to expression on the left side!");
+        fail(full_optok, "Cannot assign to expression on the left side!", ""); // TODO: say something better here
 
     auto const store = make(bld, store_node{
-                                    //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
+                                     //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
                                      .lhs = lhs.node,
                                      .rhs = opnode,
                                  });
@@ -132,10 +132,10 @@ inline entt::entity parser::post_op(expr_info lhs) noexcept
                             : make(bld, sub_node{lhs.node, rhs});
 
     if (lhs.assign == assign_index::none)
-        fail(full_optok, "Cannot assign to expression on the left side!");
+        fail(full_optok, "Cannot assign to expression on the left side!", ""); // TODO: say something better here
 
     auto const store = make(bld, store_node{
-                                    //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
+                                     //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
                                      .lhs = lhs.node,
                                      .rhs = opnode,
                                  });
@@ -165,7 +165,7 @@ inline entt::entity parser::defer_stmt() noexcept
         break;
 
     default:
-        fail(defer, "Expected call expression after `defer`.");
+        fail(defer, "Expected call expression after `defer`.", ""); // TODO: say something better here
         break;
     }
 
@@ -257,11 +257,86 @@ inline entt::entity parser::if_stmt() noexcept
 
 inline entt::entity parser::for_stmt() noexcept
 {
+    // TODO: force_eat(For)
+    // TODO: try and merge everything into a single function
+
+    eat(token_kind::KwFor); // 'for'
+
+    switch (scan.peek.kind)
+    {
+    case token_kind::KwRange:
+        return for_range_stmt();
+
+    default:
+        return for_cond_stmt();
+    }
+}
+
+inline entt::entity parser::for_range_stmt() noexcept
+{
     // TODO: everything here is temporary, fix the problems eventually
 
     // parsing
+    eat(token_kind::KwRange); // 'range'
+    auto bound = expr().node; // expr
 
-    eat(token_kind::KwFor);  // 'for'
+    auto const loop = make(bld, loop_node{});
+
+    // TODO: make sure `bound` is a positive integer expression; the `<` takes care of that but the error message can be better
+    auto counter = make(bld, value_node{int_const::make(0)});
+    auto one = make(bld, value_node{int_const::make(1)});
+
+    // TODO: figure out the exact value of this node
+    entt::entity counter_plus_one_args[]{counter, one};
+    auto counter_plus_one = bld.make(sint_type{}.top(), node_op::Add, counter_plus_one_args);
+
+    entt::entity const counter_phi_args[]{counter, counter_plus_one};
+    // TODO: figure out the type of this
+    // TODO: link the Phi to the node region
+    auto counter_phi = bld.make(sint_type{}.top(), node_op::Phi, counter_phi_args);
+    bld.reg.emplace<region_of_phi>(counter_phi, loop);
+
+    bld.reg.get<node_inputs>(counter_plus_one).nodes[0] = counter_phi; // attach the Phi node to the `x + 1` node
+
+    auto cond = make(bld, lt_node{counter_phi, bound});
+
+    // TODO: recheck the type of this
+    auto const if_yes_node = bld.make(top_type::self(), node_op::IfYes, std::span(&cond, 1));
+    bld.reg.emplace<ctrl_effect>(if_yes_node, bld.state.ctrl);
+    bld.state.ctrl = if_yes_node;
+
+    auto const for_ret = block([&](scope const *loop_env, entt::entity ret)
+                               {
+                                   // TODO: implement
+                                   // TODO: drop this; `Loop` is the region node
+                                   //    auto const region = make(bld, region_node{loop, bld.state.ctrl});
+
+                                   // TODO: all this is common on both branches
+                                   // TODO: is this correct? (from here to return)
+                                   // codegen
+                                   merge(*env.top, *loop_env, *env.top);
+
+                                   // TODO: generate the "loop-back" node
+
+                                   return ret; //
+                               });
+
+    bld.state.ctrl = loop;
+    // TODO: recheck the type of this
+    auto const rest_node = bld.make(top_type::self(), node_op::IfNot, std::span(&cond, 1));
+    bld.reg.emplace<ctrl_effect>(rest_node, bld.state.ctrl);
+    bld.state.ctrl = rest_node;
+
+    auto const rest_ret = stmt(); // stmt
+
+    return rest_ret;
+}
+
+inline entt::entity parser::for_cond_stmt() noexcept
+{
+    // TODO: everything here is temporary, fix the problems eventually
+
+    // parsing
     auto cond = expr().node; // expr
 
     auto const loop = make(bld, loop_node{});
@@ -416,7 +491,7 @@ inline entt::entity parser::simple_stmt() noexcept
     {
     case token_kind::Walrus:
         // TODO: enable local declarations back
-        fail(scan.peek, "Local declarations are disabled for now. Please use `var` syntax in the meantime.");
+        fail(scan.peek, "Local declarations are disabled for now. Please use `var` syntax in the meantime.", ""); // TODO: say something better here
         return entt::null;
         // return local_decl(lhs);
 
@@ -445,7 +520,7 @@ inline entt::entity parser::simple_stmt() noexcept
         return compound_assign(lhs);
 
     default:
-        fail(scan.peek, "Expected one of the following: `:=`, `=`, `++`, `--`, `+=`, `-=`, `*=`, `/=`");
+        fail(scan.peek, "Expected one of the following: `:=`, `=`, `++`, `--`, `+=`, `-=`, `*=`, `/=`", ""); // TODO: say something better here
         return entt::null;
     }
 }

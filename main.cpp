@@ -37,19 +37,20 @@ struct file_deleter final
 
 using file_ptr = std::unique_ptr<FILE, file_deleter>;
 
-inline size_t read_file(char const *path, char **out) noexcept;
+inline size_t read_file(char const *path, uchar **out) noexcept;
 
 int main(int argc, char **argv)
 {
     auto args = cmd_args::parse(argc, argv);
 
-    std::unique_ptr<char> text;
+    std::unique_ptr<uchar[]> text;
     auto n = read_file(args.in_path, std::out_ptr(text));
     ensure(n != -1, "Cannot read input file!");
 
     auto const start = std::chrono::system_clock::now();
 
     auto p = parser{
+        // TODO: is this correct?
         .scan{.text = text.get()},
     };
 
@@ -101,20 +102,22 @@ inline cmd_args cmd_args::parse(int argc, char **argv) noexcept
     }
 
     auto in_path = "sample.qp";
+    // in_path = argv[1];
+    // in_path = "tco.qp";
     // char const *in_path = argv[1];
     char const *out_path = "out.dot";
     bool opt = false;
 
     for (int i = 2; i < argc;)
     {
-        if (strcmp(argv[i], "-o"))
+        if (strcmp(argv[i], "-o") == 0)
         {
             ++i;
             ensure(i < argc, "Expected file name after `-o` parameter");
 
             out_path = argv[i++];
         }
-        else if (strcmp(argv[i], "-O"))
+        else if (strcmp(argv[i], "-O") == 0)
         {
             ++i;
             opt = true;
@@ -129,7 +132,7 @@ inline cmd_args cmd_args::parse(int argc, char **argv) noexcept
     };
 }
 
-inline size_t read_file(char const *path, char **out) noexcept
+inline size_t read_file(char const *path, uchar **out) noexcept
 {
     file_ptr _file{fopen(path, "r")};
     auto f = _file.get();
@@ -139,11 +142,13 @@ inline size_t read_file(char const *path, char **out) noexcept
 
     fseek(f, 0, SEEK_END);
     size_t n = ftell(f);
-    *out = (char *)::operator new(n);
+    *out = new uchar[n];
     rewind(f);
 
     // Thanks a lot, Windows
-    n = fread(*out, 1, n, f);
-    (*out)[n] = '\0';
-    return n;
+    auto const newn = fread(*out, 1, n, f);
+    if (newn != n)
+        (*out)[newn] = '\0';
+
+    return newn;
 }

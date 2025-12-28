@@ -26,7 +26,6 @@
 // - (maybe) literals should have a special type that can implicitly downcast as long as it fits? (eg. 257 cannot fit in a `uint8`)
 // ^ or maybe you can check these stuff in `type::value` instead and return an error on failure?
 // ^ ie. `value::narrow(value const *sub) { if sub out of this return out-of-bounds-value; else return sub; }
-// - find a way to avoid needing trailing newline on files (expected Semicolon but got Eof)
 // - codegen a `Load`/`Store` for global variables, as these operations need to be "lazy"
 // ^ (maybe) it's best to codegen `Load`/`Store` for everything, then cut the nodes for local stuff?
 // - (maybe) return expr type when parsing for cache friendliness?
@@ -70,9 +69,6 @@ var_env merge(var_env const &parent, var_env const &left, var_env const &right) 
 ```
 */
 // ^ take care of merging when there is shadowing; you don't want to merge those
-
-// - you don't really need to have a `global` env anymore; it is simply the current env and is merged as needed
-// ^ you might still need it for codegen though (eg. `global.set` vs `local.set`, etc.)
 
 // - lemmas: in a correct program:
 // ^ a package is followed by an import or Eof
@@ -138,6 +134,8 @@ struct parser final
     //           | 'false'
     //           | <integer>
     //           | <decimal>
+    //           | <rune>
+    //           | <string>
     //           | <unary_op> expr
     //           | post_expr( '(' expr ')' )
     //           | post_expr( type_expr_or_ident )
@@ -182,10 +180,18 @@ struct parser final
     // 'if' expr block ('else' ( if_stmt | block ))? ';' stmt
     [[nodiscard]]
     inline entt::entity if_stmt() noexcept;
-    // 'for' expr block stmt
-    // ^ ie. right now this only parses a `while`-like for loop
+
+    // for_range_stmt | for_cond_stmt
+    // or 'for' ( ( 'range' expr ) | expr ) block stmt
     [[nodiscard]]
     inline entt::entity for_stmt() noexcept;
+
+    // 'for' 'range' expr block stmt
+    [[nodiscard]]
+    inline entt::entity for_range_stmt() noexcept;
+    // 'for' expr block stmt
+    [[nodiscard]]
+    inline entt::entity for_cond_stmt() noexcept;
     // 'break' <ident>? ';' stmt
     [[nodiscard]]
     inline entt::entity break_stmt() noexcept;
@@ -242,8 +248,12 @@ struct parser final
     // 'const' <ident> '=' expr ';' decl
     // TODO: make this a statement too
     inline void const_decl() noexcept;
-    // 'var' <ident> type '=' expr ';' stmt-or-decl
-    // if parsed inside a block, this is treated as a statement and is followed by a `stmt` rather than a decl
+    // ( typed_var | untyped_var ) ';' stmt-or-decl
+    // typed_var   ::= 'var' <ident> type ( '=' expr )?
+    // untyped_var ::= 'var' <ident> type? '=' expr
+    // - ie. you have to either specify the type and omit the initializer or specify the initializer and omit the type, or you can specify both
+    // - in case you omit the initializer, the value is zero-init
+    // - if parsed inside a block, this is treated as a statement and is followed by a `stmt` rather than a decl
     template <bool AsStmt>
     inline auto var_decl() noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>;
     // struct_decl | alias_decl
@@ -268,9 +278,7 @@ struct parser final
 
     scanner scan;
     builder bld;
-
-    scope global;
-    env env = global_scope(&global);
+    env env;
 
     stacklist<entt::entity> *defer_stack = nullptr;
 
@@ -285,10 +293,6 @@ private:
     [[nodiscard]]
     inline expr_info type_expr_or_ident() noexcept;
 
-    // <ident> type
-    // i is the index of the parameter in the function declaration (used by the Proj node emitted for the parameter)
-    inline ::type const *param_decl(int64_t i) noexcept;
-
     // expr,*,? term
     inline smallvec expr_list_term(token_kind term) noexcept;
 
@@ -297,7 +301,39 @@ private:
     // TODO: should this be able to parse 0 expressions?
     inline smallvec expr_list() noexcept;
 
+    // stmt/decl
+
+    // eat the separator token of the rule
+    // - if the rule is a stmt rule, this is equivalent to eat(Semicolon)
+    // - if the rule is a decl rule, this either eats a Semicolon, does nothing on Eof, or errors otherwise
+    template <bool AsStmt>
+    inline void rule_sep() noexcept
+    {
+        if constexpr (AsStmt)
+            return (void)eat(token_kind::Semicolon);
+        else
+        {
+            switch (scan.peek.kind)
+            {
+            case token_kind::Semicolon:
+                scan.next();
+                return;
+
+            case token_kind::Eof:
+                return;
+
+            default:
+                fail(scan.peek, "Expected `;` or <end-of-file>", ""); // TODO: say something better here
+                return;
+            }
+        }
+    }
+
     // type
+
+    // <ident> type
+    // i is the index of the parameter in the function declaration (used by the Proj node emitted for the parameter)
+    inline ::type const *param_decl(int64_t i) noexcept;
 
     // array_type | pointer_type | named_type
     inline ::type const *type() noexcept;
@@ -326,16 +362,18 @@ private:
     // parsing helpers
 
     // TODO: eventually pass a span here instead of token
+    // TODO: can you pass format_string + args here?
+    // TODO: can the context ever have UTF8 contents?
+    // TODO: eventually make `msg` be an error enum, and pass the concrete information on `ctx`
     [[noreturn]]
-    inline void fail(token const &t, std::string_view msg) const;
+    inline void fail(token const &t, std::string_view msg, std::string_view ctx) const;
 
     inline token eat(token_kind kind) noexcept;
     inline token eat(std::span<token_kind const> kinds) noexcept;
 
     inline entt::entity binary_node(token_kind kind, entt::entity lhs, entt::entity rhs) noexcept;
 
-    // HACK: don't pass the string pool here
-    inline static ::env global_scope(scope *global) noexcept;
+    inline static void import_builtin(::env &e) noexcept;
 };
 
 inline void parser::merge(scope &parent, scope const &lhs, scope const &rhs) noexcept
@@ -386,9 +424,10 @@ inline entt::entity parser::phi(entt::entity old, entt::entity lhs, entt::entity
     return ret;
 }
 
-inline void parser::fail(token const &t, std::string_view msg) const
+inline void parser::fail(token const &t, std::string_view msg, std::string_view ctx) const
 {
-    std::string_view txt{scan.text, t.start};
+    // TODO: use uchars here
+    std::string_view txt{(char const *)scan.text, t.start};
     auto const start = txt.rfind('\n') + 1;
 
     auto end = t.start;
@@ -409,20 +448,33 @@ inline void parser::fail(token const &t, std::string_view msg) const
 
     // TODO: clamp the [start, end) range to, say 80 characters or maybe based on token?
 
-    auto const lcode = std::string_view{scan.text + start, t.start - start};
-    auto const ecode = std::string_view{scan.text + t.start, t.len};
-    auto const rcode = std::string_view{scan.text + t.start + t.len, end - (t.start + t.len)};
+    // TODO: do tab expansion rather than tab trimming
+    auto const lcode = [&]
+    {
+        auto const str = std::string_view{(char const *)scan.text + start, t.start - start};
+        auto const n = str.size();
+
+        size_t tabs{};
+        while (tabs < n && str[tabs] == '\t')
+            tabs++;
+
+        return str.substr(tabs);
+    }();
+
+    auto const ecode = scan.lexeme(t);
+    auto const rcode = std::string_view{(char const *)scan.text + t.start + t.len, end - (t.start + t.len)};
 
     auto ok_part = std::format("{} | {}", line_num, lcode);
 
 #define console_red "\033[31m"
 #define console_reset "\033[0m"
 
+    // TODO: handle unicode characters case when showing the arrow (nr-chars(unicode) != nr-bytes)
     std::println(
-        "{}:{}:{}: {}.\n\n{}" console_red "{}" console_reset "{}\n{:>{}}^--",
+        "{}:{}:{}: {}. {}.\n\n{}" console_red "{}" console_reset "{}\n{:>{}}^--",
         // TODO: use actual file name
         "<source>", line_num, t.start - start,
-        msg, ok_part, ecode, rcode,
+        msg, ctx, ok_part, ecode, rcode,
         "", ok_part.size() //
     );
 
@@ -440,25 +492,31 @@ inline token parser::eat(token_kind kind) noexcept
         return scan.next();
 
     // TODO: unified error interface
-    fail(scan.peek, "Unexpected token");
+    if (scan.peek.kind >= token_kind::Unknown)
+        fail(scan.peek, "Bad token", token_to_error[size_t(scan.peek.kind) - size_t(token_kind::Unknown)]);
+    else
+        fail(scan.peek, "Unexpected token", ""); // TODO: say something here
 }
 
 inline token parser::eat(std::span<token_kind const> kinds) noexcept
 {
+    // TODO: optimize this based on array size (maybe pass span size and let the compiler do its thing?)
     for (auto k : kinds)
         if (scan.peek.kind == k)
             return scan.next();
 
     // TODO: unified error interface
-    fail(scan.peek, "Unexpected token");
+    if (scan.peek.kind >= token_kind::Unknown)
+        fail(scan.peek, "Bad token", token_to_error[size_t(scan.peek.kind) - size_t(token_kind::Unknown)]);
+    else
+        fail(scan.peek, "Unexpected token", ""); // TODO: say something here
 }
 
-inline ::env parser::global_scope(scope *global) noexcept
+inline void parser::import_builtin(::env &e) noexcept
 {
     // TODO: eventually this can be replaced for an implicit `import "builtin"`
 
     // global->next_alias = {.parent = parent_memory::Global};
-    ::env e{.top = global};
 
     // defs
     // TODO: add built-in functions, such as `print`
@@ -468,10 +526,10 @@ inline ::env parser::global_scope(scope *global) noexcept
     // types
 
     // TODO: use a singleton here for now
-    e.new_type((hashed_name)(uint32_t)"int"_hs, new sint_type{});
-    e.new_type((hashed_name)(uint32_t)"bool"_hs, new bool_type{});
-    e.new_type((hashed_name)(uint32_t)"float64"_hs, new float64_type{});
+    e.new_type((hashed_name)(uint32_t)"bool"_hs, new bool_type);
+    e.new_type((hashed_name)(uint32_t)"int"_hs, new sint_type);
+    e.new_type((hashed_name)(uint32_t)"float64"_hs, new float64_type);
+    e.new_type((hashed_name)(uint32_t)"rune"_hs, new rune_type);
+    e.new_type((hashed_name)(uint32_t)"string"_hs, new string_type);
     // TODO: more built-in types
-
-    return e;
 }

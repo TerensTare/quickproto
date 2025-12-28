@@ -55,6 +55,8 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
         return std::format_to(out, "[label=\"{}\"]", type.type->as<int_const>()->n);
     case node_op::FConst:
         return std::format_to(out, "[label=\"{}\"]", type.type->as<float64>()->d);
+    case node_op::SConst:
+        return std::format_to(out, "[label=<string>]"); // TODO: show the contents here
     case node_op::BConst:
         return std::format_to(out, "[label=\"{}\"]", type.type->as<bool_const>()->b);
 

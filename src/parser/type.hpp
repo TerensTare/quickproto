@@ -20,7 +20,7 @@ inline ::type const *parser::type() noexcept
         return named_type();
 
     default:
-        fail(scan.peek, "Expected `*`, `[' or <identifier>");
+        fail(scan.peek, "Expected `*`, `[' or <identifier>", ""); // TODO: say something better here
         return nullptr;
     }
 }

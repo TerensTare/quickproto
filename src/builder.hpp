@@ -119,8 +119,6 @@ struct builder final
 
 inline entt::entity builder::make(value const *val, node_op op, std::span<entt::entity const> nins) noexcept
 {
-    auto const num_ins = nins.size();
-
     auto const n = reg.create();
     reg.emplace<node_op>(n, op);
     reg.emplace<node_type>(n, val);
