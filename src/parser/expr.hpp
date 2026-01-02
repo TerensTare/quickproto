@@ -67,7 +67,7 @@ inline expr_info parser::call(expr_info base) noexcept
     // TODO: inline CPS this
     return post_expr({
         .node = call,
-        .assign = assign_index::none,
+        .assign = no_name,
     }); // post_expr(parsed)
 }
 
@@ -198,7 +198,7 @@ inline expr_info parser::primary() noexcept
         return {
             .node = make(bld, value_node{int_const::make(val)}),
             // integers are not assignable to
-            .assign = assign_index::none,
+            .assign = no_name,
         };
     }
 
@@ -213,7 +213,7 @@ inline expr_info parser::primary() noexcept
         return {
             .node = make(bld, value_node{new float64{val}}),
             // decimals are not assignable to
-            .assign = assign_index::none,
+            .assign = no_name,
         };
     }
 
@@ -226,7 +226,7 @@ inline expr_info parser::primary() noexcept
         return {
             .node = make(bld, value_node{new rune_value{txt[1]}}), // skip the opening `'`
             // runes are not assignable to
-            .assign = assign_index::none,
+            .assign = no_name,
         };
     }
 
@@ -240,7 +240,7 @@ inline expr_info parser::primary() noexcept
         return {
             .node = make(bld, value_node{new string_value}),
             // strings are not assignable to
-            .assign = assign_index::none,
+            .assign = no_name,
         };
     }
 
@@ -248,13 +248,13 @@ inline expr_info parser::primary() noexcept
         return {
             .node = make(bld, value_node{bool_const::False()}),
             // you cannot assign to `false`
-            .assign = assign_index::none,
+            .assign = no_name,
         };
     case KwTrue:
         return {
             .node = make(bld, value_node{bool_const::True()}),
             // you cannot assign to `true`
-            .assign = assign_index::none,
+            .assign = no_name,
         };
 
     // TODO: don't use integer type here anymore
@@ -262,7 +262,7 @@ inline expr_info parser::primary() noexcept
         return {
             .node = make(bld, value_node{nil_value::self()}),
             // you cannot assign to `nil`
-            .assign = assign_index::none,
+            .assign = no_name,
         };
 
     // post_expr( '(' expr ')' )
@@ -281,7 +281,7 @@ inline expr_info parser::primary() noexcept
         return {
             .node = make(bld, not_node{.sub = sub}),
             // you cannot assign to `!expr`
-            .assign = assign_index::none,
+            .assign = no_name,
         };
     }
 
@@ -292,7 +292,7 @@ inline expr_info parser::primary() noexcept
         return {
             .node = make(bld, neg_node{.sub = sub}),
             // you cannot assign to `-expr`
-            .assign = assign_index::none,
+            .assign = no_name,
         };
     }
 
@@ -314,7 +314,7 @@ inline expr_info parser::primary() noexcept
         return {
             .node = make(bld, addr_node{.sub = sub}),
             // TODO: is this correct?
-            .assign = assign_index::none,
+            .assign = no_name,
         };
     }
 
@@ -322,7 +322,7 @@ inline expr_info parser::primary() noexcept
         std::unreachable();
         return {
             .node = entt::null,
-            .assign = assign_index::none,
+            .assign = no_name,
         };
     }
 }
@@ -340,7 +340,7 @@ inline expr_info parser::expr(parse_prec prec) noexcept
         lhs = {
             .node = binary_node(op, lhs.node, rhs.node),
             // you cannot assign to a binary expression
-            .assign = assign_index::none,
+            .assign = no_name,
         };
     }
 
@@ -464,7 +464,7 @@ inline expr_info parser::type_expr_or_ident() noexcept
             return post_expr({
                 // TODO: is this correct?
                 .node = env.values[(uint32_t)index],
-                .assign = assign_index{(uint32_t)index}, // TODO: is this correct?
+                .assign = nametok.hash, // TODO: is this correct?
             });
         // TODO: address this
         else
@@ -472,7 +472,7 @@ inline expr_info parser::type_expr_or_ident() noexcept
             fail(nametok, "Using a name before declaration is not supported yet", ""); // TODO: say something better here
             return {
                 .node = entt::null,
-                .assign = assign_index::none,
+                .assign = no_name,
             };
         }
     }
@@ -498,7 +498,7 @@ inline expr_info parser::type_expr_or_ident() noexcept
         return post_expr({
             .node = cast,
             // you cannot assign to cast expressions, but maybe to the resulting sub-expression (can you?)
-            .assign = assign_index::none,
+            .assign = no_name,
         });
     }
 
@@ -521,7 +521,7 @@ inline expr_info parser::type_expr_or_ident() noexcept
         return post_expr({
             .node = init, // TODO: is this correct here?
             // you cannot assign to type literal expressions, but maybe to the resulting sub-expression (can you?)
-            .assign = assign_index::none,
+            .assign = no_name,
         });
     }
 
@@ -529,7 +529,7 @@ inline expr_info parser::type_expr_or_ident() noexcept
         fail(scan.peek, "Expected '(` or `{` after type", ""); // TODO: say something better here
         return {
             .node = entt::null,
-            .assign = assign_index::none,
+            .assign = no_name,
         };
     }
 }

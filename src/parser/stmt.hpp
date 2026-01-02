@@ -36,7 +36,7 @@ inline entt::entity parser::assign(expr_info lhs) noexcept
 
     // codegen
 
-    if (lhs.assign == assign_index::none)
+    if (lhs.assign == no_name)
         fail(optok, "Cannot assign to expression on the left side!", ""); // TODO: say something better here
 
     // auto const store = make(bld, store_node{
@@ -46,7 +46,7 @@ inline entt::entity parser::assign(expr_info lhs) noexcept
     //                              });
 
     // TODO: generate a store if needed (or rather, make the store node which should collapse to `rhs` if not accessing memory)
-    env.set_value((name_index)uint32_t(lhs.assign), rhs);
+    env.set_value(lhs.assign, rhs);
 
     return stmt();
 }
@@ -92,7 +92,7 @@ inline entt::entity parser::compound_assign(expr_info lhs) noexcept
             ? make(bld, bit_xor_node{lhs.node, rhs})
             : make(bld, bit_or_node{lhs.node, rhs});
 
-    if (lhs.assign == assign_index::none)
+    if (lhs.assign == no_name)
         fail(full_optok, "Cannot assign to expression on the left side!", ""); // TODO: say something better here
 
     // auto const store = make(bld, store_node{
@@ -102,7 +102,7 @@ inline entt::entity parser::compound_assign(expr_info lhs) noexcept
     //                              });
 
     // TODO: generate a store if needed (or rather, make the store node which should collapse to `opnode` if not accessing memory)
-    env.set_value((name_index)uint32_t(lhs.assign), opnode);
+    env.set_value(lhs.assign, opnode);
 
     return stmt();
 }
@@ -133,7 +133,7 @@ inline entt::entity parser::post_op(expr_info lhs) noexcept
                             ? make(bld, add_node{lhs.node, rhs})
                             : make(bld, sub_node{lhs.node, rhs});
 
-    if (lhs.assign == assign_index::none)
+    if (lhs.assign == no_name)
         fail(full_optok, "Cannot assign to expression on the left side!", ""); // TODO: say something better here
 
     // auto const store = make(bld, store_node{
@@ -143,7 +143,7 @@ inline entt::entity parser::post_op(expr_info lhs) noexcept
     //                              });
 
     // TODO: generate a store if needed (or rather, make the store node which should collapse to `opnode` if not accessing memory)
-    env.set_value((name_index)uint32_t(lhs.assign), opnode);
+    env.set_value(lhs.assign, opnode);
 
     return stmt();
 }

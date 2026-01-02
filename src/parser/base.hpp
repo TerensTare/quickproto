@@ -91,16 +91,13 @@ enum class parse_prec : uint8_t
     Factor,     // * /
 };
 
-enum class assign_index : uint32_t
-{
-    none = ~uint32_t{},
-};
+static constexpr hashed_name no_name = hashed_name{(entt::id_type)entt::hashed_string::value("<no-name>")};
 
 struct expr_info final
 {
     entt::entity node;
-    assign_index assign = assign_index::none;
-    // ^ The `name_index` for the base `value` of the expression if assignable; `none` otherwise
+    hashed_name assign = no_name;
+    // ^ The `hashed_name` for the base `value` of the expression if assignable; `no_name` otherwise
 };
 
 struct parser final
@@ -382,6 +379,7 @@ private:
 
 inline void parser::merge(scope &parent, scope const &lhs, scope const &rhs) noexcept
 {
+    // TODO: pass the `Region` id here, don't assume or deduce it
     // invariant: `lhs` and `rhs` are branches of `parent` and never `null`
 
     // TODO: hash the `key` for faster lookup
@@ -397,6 +395,7 @@ inline void parser::merge(scope &parent, scope const &lhs, scope const &rhs) noe
             auto const right = rhs.get_name(key);
 
             // TODO: recheck this
+            // TODO: is it that if a value is not modified in a branch, it will point to `old`?
             auto &&val = env.values[(uint32_t)index];
             auto &&lval = env.values[(uint32_t)left];
             auto &&rval = env.values[(uint32_t)right];

@@ -96,16 +96,20 @@ struct env final
         types.push_back(ty);
     }
 
-    // TODO: is this needed? (branches, loops?)
-    inline void set_value(name_index name, entt::entity id) noexcept
+    // TODO: probably should make the `hashed_name` for assignability strong-typed and pass it here as well.
+    inline void set_value(hashed_name name, entt::entity id) noexcept
     {
         // old semantics: check if existing, then write to this env
         // current semantics: write to the value's index
         // ^ TODO: are these semantics correct?
-        ensure(name < name_index::type_mask, "Variable assigned to before declaration!");
+        auto const index = get_name(name);
+        ensure(index < name_index::type_mask, "Variable assigned to before declaration!");
 
         // TODO: also set the value in the map
-        values[(uint32_t)name] = id;
+        auto const n = values.size();
+        values.push_back(id);
+        // TODO: is this correct?
+        top->table[name] = (name_index)(uint32_t)n;
     }
 
     // TODO: use a non-shrinking page_vector here
@@ -113,6 +117,7 @@ struct env final
     // TODO: you can still cut some values out from time to time (function scopes)
     std::vector<type const *> types;
     std::vector<entt::entity> values; // (name -> value) mapping
+    // TODO: value and memory are two separate things
 
     scope *top;
 };
