@@ -11,7 +11,6 @@ struct load_node final
 {
     entt::entity base;
     int_value const *offset = nullptr;
-    // entt::entity offset = entt::null; // HACK: if null, simply return `base`
 
     inline value const *infer(type_storage const &types) const;
     inline entt::entity emit(builder &bld, value const *val) const;

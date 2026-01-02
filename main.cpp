@@ -102,7 +102,7 @@ inline cmd_args cmd_args::parse(int argc, char **argv) noexcept
     }
 
     auto in_path = "sample.qp";
-    // in_path = argv[1];
+    in_path = argv[1];
     // in_path = "tco.qp";
     // char const *in_path = argv[1];
     char const *out_path = "out.dot";

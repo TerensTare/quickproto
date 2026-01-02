@@ -49,7 +49,7 @@ enum class node_op : uint8_t
     Program, // Program - a no-op node for preserving ordering between loads/stores and for representing side effects. Indicates the beginning of a program + the program's memory (stack + heap)
              // ^ this is the "local memory" node of a function (in terms of memory) + the "function start" in terms of control flow
     // TODO: Package node
-    Global, // Global - like `Program` but at global level only (ie. this does not include local/heap allocations or local control flow)
+    GlobalMemory, // GlobalMemory - like `Program` but at global level only (ie. this does not include local/heap allocations or local control flow)
     Start,  // Start - like `Program` but for a function
 
     Load,   // Load In=[somePlace, indexNode; memState]
@@ -109,6 +109,8 @@ enum class node_op : uint8_t
     FConst, // FConst Value=someFloat
     SConst, // SConst Value=someString
     BConst, // BConst Value=someBool
+    Struct, // Struct Value=structValue In=[members...]
+
     Error,  // TODO: temporary hack
 };
 
@@ -134,7 +136,7 @@ struct users final
 // TODO: nodes have a fixed number of inputs (except maybe call when optimized?) so you can use a `dynamic_array<T>` here probably with a small buffer for math nodes
 struct node_inputs final
 {
-    smallvec nodes;
+    smallvec<entt::entity> nodes;
 };
 
 // component
@@ -152,7 +154,7 @@ struct ctrl_effect final
         -> PackageMemory (Top)
             -> HeapMemory (Heap)
             -> StackMemory
-                -> StaticMemory (Global)
+                -> StaticMemory (GlobalMemory)
                 -> FunctionMemory (Start/Local)
     ^ then when an executable is compiled, all `PackageMemory` is propagated to `ProgramMemory` for whole program optimizations
 */
@@ -161,7 +163,7 @@ struct mem_effect final
     entt::entity prev;
     entt::entity target; // the node from which this node reads from/writes to
     uint32_t tag;        // if -1, equivalent to `Top` (eg. accessing a runtime index of an array)
-    // ^ in all cases, `tag` should never be top but rather `parent` is propagated to the previous level (eg. `Top(Offset)` is `Local(x)`/`Global(x)`/`Heap(x)` depending on the parent)
+    // ^ in all cases, `tag` should never be top but rather `parent` is propagated to the previous level (eg. `Top(Offset)` is `Local(x)`/`GlobalMemory(x)`/`Heap(x)` depending on the parent)
     // TODO: for structs, `tag` can probably just be the hash of the member, but then what is `Top`?
 };
 

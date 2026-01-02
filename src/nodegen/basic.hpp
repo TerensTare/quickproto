@@ -50,24 +50,6 @@ struct value_node final
 
 static_assert(nodegen<value_node>);
 
-inline value const *value_node::infer(type_storage const &) const { return val; }
-
-inline entt::entity value_node::emit(builder &bld, value const *val) const
-{
-    // TODO: more cases here
-    auto const kind = (val->as<int_const>())
-                          ? node_op::IConst
-                      : (val->as<float64>())
-                          ? node_op::FConst
-                      : (val->as<string_value>())
-                          ? node_op::SConst
-                          : node_op::BConst;
-
-    return bld.make(val, kind, {});
-}
-
-static_assert(nodegen<value_node>);
-
 template <nodegen Gen>
 [[nodiscard]]
 inline entt::entity make(builder &bld, Gen const &gen)
@@ -119,3 +101,21 @@ inline entt::entity make(builder &bld, Gen const &gen)
 
     return n;
 }
+
+inline value const *value_node::infer(type_storage const &) const { return val; }
+
+inline entt::entity value_node::emit(builder &bld, value const *val) const
+{
+    // TODO: more cases here
+    auto const kind = (val->as<int_const>())
+                          ? node_op::IConst
+                      : (val->as<float64>())
+                          ? node_op::FConst
+                      : (val->as<string_value>())
+                          ? node_op::SConst
+                          : node_op::BConst;
+
+    return bld.make(val, kind, {});
+}
+
+static_assert(nodegen<value_node>);

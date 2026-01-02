@@ -151,7 +151,7 @@ struct bool_top final : bool_value
     }
 
     // unary
-    inline value const *bnot(value const *rhs) const noexcept { return this; }
+    inline value const *bnot() const noexcept { return this; }
 
     // comparators
     inline value const *eq(value const *rhs) const noexcept

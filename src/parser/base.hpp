@@ -294,12 +294,12 @@ private:
     inline expr_info type_expr_or_ident() noexcept;
 
     // expr,*,? term
-    inline smallvec expr_list_term(token_kind term) noexcept;
+    inline smallvec<entt::entity> expr_list_term(token_kind term) noexcept;
 
     // expr (,expr)*
     // ^ ie. there cannot be a trailing comma and the terminator can be anything except something that starts an expression
     // TODO: should this be able to parse 0 expressions?
-    inline smallvec expr_list() noexcept;
+    inline smallvec<entt::entity> expr_list() noexcept;
 
     // stmt/decl
 
@@ -346,6 +346,10 @@ private:
 
     // <ident>
     inline ::type const *named_type() noexcept;
+
+    // '(' param_decl,*,? ')'
+    // ^ used by `func`-related rules to parse the list of parameters
+    inline smallvec<::type const *> param_list() noexcept;
 
     // other helpers
 

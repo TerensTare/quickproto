@@ -66,6 +66,7 @@ struct value
     virtual value const *deref() const noexcept;
     // &self
     // TODO: by default this should not give an error
+    // TODO: this should return `typed_memory` probably?
     virtual value const *addr() const noexcept;
 
     // comparators
@@ -101,14 +102,14 @@ struct value
     virtual value const *cast(type const *target) const noexcept;
 };
 
-// unknown type, used for nodes whose type is lazy-evaluated (eg. calls to not-yet declared functions)
+// unknown value, used for nodes whose type is lazy-evaluated (eg. calls to not-yet declared functions)
 // TODO: do you need to overload the operators for this?
-struct top_type final : value
+struct top_value final : value
 {
     inline static value const *self() noexcept
     {
-        static top_type ty;
-        return &ty;
+        static top_value val;
+        return &val;
     }
 
     // TODO: overload other calls too and figure out their type
@@ -116,6 +117,16 @@ struct top_type final : value
 
     inline value const *neg() const noexcept { return this; }
     inline value const *unot() const noexcept { return this; }
+};
+
+// no value at all
+struct bot_value final : value
+{
+    inline static value const *self() noexcept
+    {
+        static bot_value val;
+        return &val;
+    }
 };
 
 // Error that happens during the typecheck stage.
@@ -177,35 +188,35 @@ struct no_member_error final : value_error
 inline value const *value::assign(value const *rhs) const noexcept
 {
     // TODO: is this correct? not entirely
-    return rhs->as<top_type>()
+    return rhs->as<top_value>()
                ? rhs
                : new binary_op_not_implemented_type{"=", this, rhs};
 }
 
 inline value const *value::add(value const *rhs) const noexcept
 {
-    return rhs->as<top_type>()
+    return rhs->as<top_value>()
                ? rhs
                : new binary_op_not_implemented_type{"+", this, rhs};
 }
 
 inline value const *value::sub(value const *rhs) const noexcept
 {
-    return rhs->as<top_type>()
+    return rhs->as<top_value>()
                ? rhs
                : new binary_op_not_implemented_type{"-", this, rhs};
 }
 
 inline value const *value::mul(value const *rhs) const noexcept
 {
-    return rhs->as<top_type>()
+    return rhs->as<top_value>()
                ? rhs
                : new binary_op_not_implemented_type{"*", this, rhs};
 }
 
 inline value const *value::div(value const *rhs) const noexcept
 {
-    return rhs->as<top_type>()
+    return rhs->as<top_value>()
                ? rhs
                : new binary_op_not_implemented_type{"/", this, rhs};
 }
@@ -217,49 +228,49 @@ inline value const *value::addr() const noexcept { return new unary_op_not_imple
 
 inline value const *value::eq(value const *rhs) const noexcept
 {
-    return rhs->as<top_type>()
+    return rhs->as<top_value>()
                ? rhs
                : new binary_op_not_implemented_type{"==", this, rhs};
 }
 
 inline value const *value::lt(value const *rhs) const noexcept
 {
-    return rhs->as<top_type>()
+    return rhs->as<top_value>()
                ? rhs
                : new binary_op_not_implemented_type{"<", this, rhs};
 }
 
 inline value const *value::logic_and(value const *rhs) const noexcept
 {
-    return rhs->as<top_type>()
+    return rhs->as<top_value>()
                ? rhs
                : new binary_op_not_implemented_type{"&&", this, rhs};
 }
 
 inline value const *value::logic_or(value const *rhs) const noexcept
 {
-    return rhs->as<top_type>()
+    return rhs->as<top_value>()
                ? rhs
                : new binary_op_not_implemented_type{"||", this, rhs};
 }
 
 inline value const *value::band(value const *rhs) const noexcept
 {
-    return rhs->as<top_type>()
+    return rhs->as<top_value>()
                ? rhs
                : new binary_op_not_implemented_type{"&", this, rhs};
 }
 
 inline value const *value::bxor(value const *rhs) const noexcept
 {
-    return rhs->as<top_type>()
+    return rhs->as<top_value>()
                ? rhs
                : new binary_op_not_implemented_type{"^", this, rhs};
 }
 
 inline value const *value::bor(value const *rhs) const noexcept
 {
-    return rhs->as<top_type>()
+    return rhs->as<top_value>()
                ? rhs
                : new binary_op_not_implemented_type{"|", this, rhs};
 }

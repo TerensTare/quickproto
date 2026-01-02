@@ -23,7 +23,10 @@ static_assert(nodegen<return_node>);
 
 inline value const *return_node::infer(type_storage const &types) const
 {
+    // HACK: figure out the exact type of this
     // TODO: typecheck with the function return type
+    return bot_value::self();
+
     auto const n = values.size();
     // TODO: should you handle these as special cases?
     if (n == 0)

@@ -39,13 +39,14 @@ inline entt::entity parser::assign(expr_info lhs) noexcept
     if (lhs.assign == assign_index::none)
         fail(optok, "Cannot assign to expression on the left side!", ""); // TODO: say something better here
 
-    auto const store = make(bld, store_node{
-                                     //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
-                                     .lhs = lhs.node,
-                                     .rhs = rhs,
-                                 });
+    // auto const store = make(bld, store_node{
+    //                                  //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
+    //                                  .lhs = lhs.node,
+    //                                  .rhs = rhs,
+    //                              });
 
-    // env.set_value((name_index)uint32_t(lhs.assign), store);
+    // TODO: generate a store if needed (or rather, make the store node which should collapse to `rhs` if not accessing memory)
+    env.set_value((name_index)uint32_t(lhs.assign), rhs);
 
     return stmt();
 }
@@ -94,13 +95,14 @@ inline entt::entity parser::compound_assign(expr_info lhs) noexcept
     if (lhs.assign == assign_index::none)
         fail(full_optok, "Cannot assign to expression on the left side!", ""); // TODO: say something better here
 
-    auto const store = make(bld, store_node{
-                                     //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
-                                     .lhs = lhs.node,
-                                     .rhs = opnode,
-                                 });
+    // auto const store = make(bld, store_node{
+    //                                  //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
+    //                                  .lhs = lhs.node,
+    //                                  .rhs = opnode,
+    //                              });
 
-    // env.set_value((name_index)uint32_t(lhs.assign), store);
+    // TODO: generate a store if needed (or rather, make the store node which should collapse to `opnode` if not accessing memory)
+    env.set_value((name_index)uint32_t(lhs.assign), opnode);
 
     return stmt();
 }
@@ -134,13 +136,14 @@ inline entt::entity parser::post_op(expr_info lhs) noexcept
     if (lhs.assign == assign_index::none)
         fail(full_optok, "Cannot assign to expression on the left side!", ""); // TODO: say something better here
 
-    auto const store = make(bld, store_node{
-                                     //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
-                                     .lhs = lhs.node,
-                                     .rhs = opnode,
-                                 });
+    // auto const store = make(bld, store_node{
+    //                                  //  .prev = env.get_mem((name_index)(uint32_t)lhs.assign),
+    //                                  .lhs = lhs.node,
+    //                                  .rhs = opnode,
+    //                              });
 
-    // env.set_value((name_index)uint32_t(lhs.assign), store);
+    // TODO: generate a store if needed (or rather, make the store node which should collapse to `opnode` if not accessing memory)
+    env.set_value((name_index)uint32_t(lhs.assign), opnode);
 
     return stmt();
 }
@@ -184,11 +187,11 @@ inline entt::entity parser::if_stmt() noexcept
     auto const cond = expr().node; // expr
 
     // TODO: recheck the type of this
-    auto const if_yes_node = bld.make(top_type::self(), node_op::IfYes, std::span(&cond, 1));
+    auto const if_yes_node = bld.make(top_value::self(), node_op::IfYes, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(if_yes_node, bld.state.ctrl);
 
     // TODO: recheck the type of this
-    auto const if_not_node = bld.make(top_type::self(), node_op::IfNot, std::span(&cond, 1));
+    auto const if_not_node = bld.make(top_value::self(), node_op::IfNot, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(if_not_node, bld.state.ctrl);
 
     bld.state.ctrl = if_yes_node;
@@ -203,17 +206,35 @@ inline entt::entity parser::if_stmt() noexcept
             {
                 scan.next(); // 'else'
 
-                ensure(
-                    (scan.peek.kind == token_kind::KwIf || scan.peek.kind == token_kind::LeftBrace),
-                    "Expected `if` or `{` after `else`!" //
-                );
+                if (!((scan.peek.kind == token_kind::KwIf) || (scan.peek.kind == token_kind::LeftBrace)))
+                    fail(scan.peek, "Expected `if` or `{` after `else`!", ""); // TODO: give more context
 
                 // TODO: parse the `stmt` after the `if`, return or not
                 // if_stmt | block, then the outer `stmt` that tails
                 // TODO: also merge the `env` even on the `if` case
                 return (scan.peek.kind == token_kind::KwIf)
-                           // TODO: make a region for this case too
-                           ? if_stmt()
+                           ? [&]()
+                {
+                    // TODO: recheck everything in this case
+
+                    // HACK: do something better
+                    auto const else_ret = if_stmt();
+
+                    auto const region = make(bld, region_node{then_state, bld.state.ctrl});
+
+                    // TODO: all this is common on both branches
+                    // TODO: is this correct? (from here to return)
+                    // TODO: enable this at some point
+                    // codegen
+                    // merge(*env.top, *then_env, *else_env);
+
+                    // TODO: if either `if` or `else` has a return, codegen a phi node and return it
+                    // TODO: is this correct?
+                    // TODO: `phi` should merge the children of `return` nodes
+                    auto const merge_ret = make(bld, return_phi_node{region, then_ret, else_ret});
+
+                    return merge_ret; // TODO: recheck this
+                }()
                            : block([&](scope const *else_env, entt::entity else_ret)
                                    {
                                        // TODO: this should be common for both case (`else if` or just `else`)
@@ -283,25 +304,24 @@ inline entt::entity parser::for_range_stmt() noexcept
     auto const loop = make(bld, loop_node{});
 
     // TODO: make sure `bound` is a positive integer expression; the `<` takes care of that but the error message can be better
-    auto counter = make(bld, value_node{int_const::make(0)});
-    auto one = make(bld, value_node{int_const::make(1)});
+    auto const counter = make(bld, value_node{int_const::make(0)});
+    auto const one = make(bld, value_node{int_const::make(1)});
 
     // TODO: figure out the exact value of this node
-    entt::entity counter_plus_one_args[]{counter, one};
-    auto counter_plus_one = bld.make(sint_type{}.top(), node_op::Add, counter_plus_one_args);
+    entt::entity const counter_plus_one_args[]{counter, one};
+    auto const counter_plus_one = bld.make(sint_type{}.top(), node_op::Add, counter_plus_one_args);
 
     entt::entity const counter_phi_args[]{counter, counter_plus_one};
     // TODO: figure out the type of this
-    // TODO: link the Phi to the node region
-    auto counter_phi = bld.make(sint_type{}.top(), node_op::Phi, counter_phi_args);
+    auto const counter_phi = bld.make(sint_type{}.top(), node_op::Phi, counter_phi_args);
     bld.reg.emplace<region_of_phi>(counter_phi, loop);
 
     bld.reg.get<node_inputs>(counter_plus_one).nodes[0] = counter_phi; // attach the Phi node to the `x + 1` node
 
-    auto cond = make(bld, lt_node{counter_phi, bound});
+    auto const cond = make(bld, lt_node{counter_phi, bound});
 
     // TODO: recheck the type of this
-    auto const if_yes_node = bld.make(top_type::self(), node_op::IfYes, std::span(&cond, 1));
+    auto const if_yes_node = bld.make(top_value::self(), node_op::IfYes, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(if_yes_node, bld.state.ctrl);
     bld.state.ctrl = if_yes_node;
 
@@ -323,7 +343,7 @@ inline entt::entity parser::for_range_stmt() noexcept
 
     bld.state.ctrl = loop;
     // TODO: recheck the type of this
-    auto const rest_node = bld.make(top_type::self(), node_op::IfNot, std::span(&cond, 1));
+    auto const rest_node = bld.make(top_value::self(), node_op::IfNot, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(rest_node, bld.state.ctrl);
     bld.state.ctrl = rest_node;
 
@@ -342,7 +362,7 @@ inline entt::entity parser::for_cond_stmt() noexcept
     auto const loop = make(bld, loop_node{});
 
     // TODO: recheck the type of this
-    auto const if_yes_node = bld.make(top_type::self(), node_op::IfYes, std::span(&cond, 1));
+    auto const if_yes_node = bld.make(top_value::self(), node_op::IfYes, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(if_yes_node, bld.state.ctrl);
     bld.state.ctrl = if_yes_node;
 
@@ -363,7 +383,7 @@ inline entt::entity parser::for_cond_stmt() noexcept
 
     bld.state.ctrl = loop;
     // TODO: recheck the type of this
-    auto const rest_node = bld.make(top_type::self(), node_op::IfNot, std::span(&cond, 1));
+    auto const rest_node = bld.make(top_value::self(), node_op::IfNot, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(rest_node, bld.state.ctrl);
     bld.state.ctrl = rest_node;
 

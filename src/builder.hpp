@@ -42,21 +42,20 @@ struct scope_visibility final
 
 struct builder final
 {
-    inline builder()
-        : global{
-              // TODO: is this correct?
-              .name = visibility::maybe_reachable,
-              .pool = &reg.storage<void>((entt::id_type)visibility::maybe_reachable),
-          }
-    {
-    }
-
     // invariant: The returned entity has the following components:
     // `node`
     // `node_type`
     // `node_inputs`
     // invariant: `users` is updated for any entity in `nins`
     inline entt::entity make(value const *val, node_op op, std::span<entt::entity const> nins) noexcept;
+
+    // invariant: The returned entity has the following components:
+    // `node`
+    // `node_type`
+    // `node_inputs`
+    // invariant: `users` is updated for any entity in `nins`
+    // TODO: find a way to pass smallvec here, but the problem is that `{}` is a value of either span or smallvec, so the overloads collide
+    inline entt::entity make(value const *val, node_op op, size_t n_ins, entt::entity *ins) noexcept;
 
     // TODO: debug_ensure that the given visibility is below current level
     template <visibility Vis>
@@ -77,8 +76,7 @@ struct builder final
 
     // TODO: is there any node (other than `Region`) with more than 1 effect dependency?
     entt::registry reg;
-    scope_visibility global;
-    scope_visibility *scopes = &global;
+    scope_visibility *scopes;
 
     struct func_state
     {
@@ -89,12 +87,15 @@ struct builder final
     };
 
     // Push a new function state, return the old one so you can reset it
+    // Must call `builder.pop_vis` when done with the function
     // TODO: pass the function name here
     [[nodiscard]]
-    inline func_state new_func() noexcept
+    inline func_state new_func(scope_visibility &vis) noexcept
     {
+        push_vis<visibility::maybe_reachable>(vis);
+
         // TODO: recheck this
-        auto const ns = make(top_type::self(), node_op::Start, {});
+        auto const ns = make(top_value::self(), node_op::Start, {});
         reg.emplace<mem_effect>(ns) = {
             .prev = glob_mem,
             .target = glob_mem,
@@ -119,16 +120,22 @@ struct builder final
 
 inline entt::entity builder::make(value const *val, node_op op, std::span<entt::entity const> nins) noexcept
 {
+    auto vec = compress(nins);
+    return this->make(val, op, vec.n, vec.entries.release());
+}
+
+inline entt::entity builder::make(value const *val, node_op op, size_t n_ins, entt::entity *ins) noexcept
+{
     auto const n = reg.create();
     reg.emplace<node_op>(n, op);
     reg.emplace<node_type>(n, val);
-    reg.emplace<node_inputs>(n, compress(nins));
+    reg.emplace<node_inputs>(n, n_ins, std::unique_ptr<entt::entity[]>(ins));
     scopes->pool->emplace(n);
 
     // TODO: optimize
-    for (uint32_t i{}; auto id : nins)
+    for (uint32_t i{}; i < n_ins; ++i)
     {
-        reg.get_or_emplace<users>(id).entries.push_back({n, i++});
+        reg.get_or_emplace<users>(ins[i]).entries.push_back({n, i});
     }
 
     return n;

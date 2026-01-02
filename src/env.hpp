@@ -16,16 +16,7 @@
 
 // TODO:
 // - remove alias class from here
-// - interned strings are sequential for now, so find a way to exploit it on scope storage
 // - have a push/pop mechanism for the arrays in `env`
-// - `get(var)` is always recursive but `set(var)` only affects the topmost environment
-// - (maybe) it's better if you just clone the maps instead of using parent links?
-// ^ pros:
-// ^- no pointer chasing for parent data
-// ^- you don't care much about `Phi` and stuff; simply have a pass that reduces links to `Phi(n, n)` to a link to `n`
-// ^ cons
-// ^- you have to copy everything all the time (maybe you can keep constant stuff separately and have a pointer to there?)
-// ^-- to mitigate this, you can have a separate `const_env` for non-mutable stuff and store it as links, everything else is deep copied
 
 enum class name_index : uint32_t
 {
@@ -62,14 +53,11 @@ struct scope final
     scope *prev = nullptr;
 };
 
-// TODO: you probably want to push `Program`, `Global`, etc. to the global env for ease of access
+// TODO: you probably want to push `Program`, `GlobalMemory`, etc. to the global env for ease of access
 struct env final
 {
     // TODO: probably best to remove this from here
     inline auto get_name(hashed_name name) const noexcept { return top->get_name(name); }
-
-    // TODO: is this needed? (branches, loops?)
-    inline auto get_mem(name_index name) const noexcept { return value_memory[(uint32_t)name]; }
 
     inline auto get_type(name_index name) const noexcept
     {
@@ -94,7 +82,6 @@ struct env final
         auto const n = values.size();
         top->table.insert({name, name_index(n)});
         values.push_back(id);
-        value_memory.push_back(id); // TODO: is this correct?
         // alias.push_back(top->next_alias);
         // top->next_alias.tag++;
     }
@@ -117,7 +104,8 @@ struct env final
         // ^ TODO: are these semantics correct?
         ensure(name < name_index::type_mask, "Variable assigned to before declaration!");
 
-        value_memory[(uint32_t)name] = id;
+        // TODO: also set the value in the map
+        values[(uint32_t)name] = id;
     }
 
     // TODO: use a non-shrinking page_vector here
@@ -125,8 +113,6 @@ struct env final
     // TODO: you can still cut some values out from time to time (function scopes)
     std::vector<type const *> types;
     std::vector<entt::entity> values; // (name -> value) mapping
-    // TODO: this should be per field
-    std::vector<entt::entity> value_memory; // (name -> memory_state) mapping
 
     scope *top;
 };

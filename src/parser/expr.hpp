@@ -110,6 +110,7 @@ inline expr_info parser::member(expr_info base) noexcept
     // TODO: handle pointers as well
     auto rawval = bld.reg.get<node_type>(base.node).type;
     auto baseval = rawval->as<struct_value>();
+    // TODO: this is not a syntax error
     if (!baseval)
         fail(dot, "Cannot access member of type!", ""); // TODO: say something better here
 
@@ -125,6 +126,7 @@ inline expr_info parser::member(expr_info base) noexcept
         }
     }
 
+    // TODO: this is not a syntax error
     if (offset == -1)
         fail(mem, "Member not present in type", ""); // TODO: say something better here
 
@@ -345,12 +347,12 @@ inline expr_info parser::expr(parse_prec prec) noexcept
     return lhs;
 }
 
-inline smallvec parser::expr_list_term(token_kind term) noexcept
+inline smallvec<entt::entity> parser::expr_list_term(token_kind term) noexcept
 {
     // TODO: do you ever need the assign/address info for the parsed nodes?
 
-    auto parse_arguments = [&](auto &&self, stacklist<entt::entity> *ins, int list_size = 0)
-        -> smallvec
+    auto parse_arguments = [&](this auto &&self, stacklist<entt::entity> *ins, int list_size = 0)
+        -> smallvec<entt::entity>
     {
         // TODO: is the control flow correct here?
         if (scan.peek.kind != term)
@@ -363,7 +365,7 @@ inline smallvec parser::expr_list_term(token_kind term) noexcept
             if (scan.peek.kind == token_kind::Comma)
             {
                 scan.next(); // ','
-                return self(self, ins, list_size);
+                return self(ins, list_size);
             }
         }
 
@@ -371,17 +373,17 @@ inline smallvec parser::expr_list_term(token_kind term) noexcept
         return compress(ins, list_size);
     };
 
-    return parse_arguments(parse_arguments, nullptr, 0);
+    return parse_arguments(nullptr, 0);
 }
 
-inline smallvec parser::expr_list() noexcept
+inline smallvec<entt::entity> parser::expr_list() noexcept
 {
     // TODO: do you ever need the assign/address info for the parsed nodes?
     auto const first = expr().node; // expr
     stacklist head{.value = first};
 
-    auto parse_arguments = [&](auto &&self, stacklist<entt::entity> *ins, int list_size = 0)
-        -> smallvec
+    auto parse_arguments = [&](this auto &&self, stacklist<entt::entity> *ins, int list_size = 0)
+        -> smallvec<entt::entity>
     {
         // TODO: is the control flow correct here?
         if (scan.peek.kind == token_kind::Comma)
@@ -390,13 +392,13 @@ inline smallvec parser::expr_list() noexcept
             auto const arg = expr().node; // expr
             stacklist node{.value = arg, .prev = ins};
 
-            return self(self, &node, list_size + 1);
+            return self(&node, list_size + 1);
         }
 
         return compress(ins, list_size);
     };
 
-    return parse_arguments(parse_arguments, &head, 1);
+    return parse_arguments(&head, 1);
 }
 
 inline entt::entity parser::binary_node(token_kind kind, entt::entity lhs, entt::entity rhs) noexcept
@@ -460,6 +462,7 @@ inline expr_info parser::type_expr_or_ident() noexcept
             ty = env.get_type(index);
         else if (index != name_index::missing)
             return post_expr({
+                // TODO: is this correct?
                 .node = env.values[(uint32_t)index],
                 .assign = assign_index{(uint32_t)index}, // TODO: is this correct?
             });
@@ -483,9 +486,13 @@ inline expr_info parser::type_expr_or_ident() noexcept
     // cast
     case token_kind::LeftParen:
     {
+        // parsing
+
         scan.next();                  // '('
         auto const sub = expr().node; // expr
         eat(token_kind::RightParen);  // ')'
+
+        // codegen
 
         auto const cast = make(bld, cast_node{.target = ty, .base = sub});
         return post_expr({
@@ -500,71 +507,16 @@ inline expr_info parser::type_expr_or_ident() noexcept
     {
         // parsing
 
-        auto lbrace = scan.next();                             // '{'
+        auto const lbrace = scan.next();                       // '{'
         auto members = expr_list_term(token_kind::RightBrace); // '}'
 
         // codegen
 
-        // HACK: do something better here
-        if (!ty->as<struct_type>() && !ty->as<::array_type>())
+        auto cty = ty->as<composite_type>();
+        if (!cty)
             fail(lbrace, "Type cannot be brace-initialized", ""); // TODO: say something better here
 
-        // TODO: construct the object (emit the Stores)
-        auto const init = make(bld, alloca_node{.ty = ty});
-        auto ret = init;
-
-        // TODO: if arg_members==0, do a full Zero (memset)
-
-        size_t i{};
-        for (; i < members.n; ++i)
-        {
-            auto set = make(bld, store_node{
-                                     .lhs = init,
-                                     .offset = int_const::make((int64_t)i),
-                                     .rhs = members[i],
-                                 });
-            ret = set;
-        }
-
-        // HACK: implement this better
-        if (auto sty = ty->as<struct_type>())
-        {
-            auto const n_ty_members = sty->n_members;
-
-            for (; i < n_ty_members; ++i)
-            {
-                auto set = make(bld, store_node{
-                                         .lhs = init,
-                                         .offset = int_const::make((int64_t)i),
-                                         .rhs = make(bld, value_node{sty->members[i].ty->zero()}),
-                                     });
-                ret = set;
-            }
-        }
-        else if (auto aty = ty->as<::array_type>())
-        {
-            auto const n_ty_members = ty->as<::array_type>()->n;
-            // optimizations: do not make the zero-value node unless there is a member to initialize
-            if (i < n_ty_members)
-            {
-                // optimization: all array members have the same type, hence the same zero-value
-                auto zero = make(bld, value_node{aty->base->zero()});
-
-                for (; i < n_ty_members; ++i)
-                {
-                    auto set = make(bld, store_node{
-                                             .lhs = init,
-                                             .offset = int_const::make((int64_t)i),
-                                             .rhs = zero,
-                                         });
-                    ret = set;
-                }
-            }
-        }
-        else
-        {
-            std::unreachable();
-        }
+        auto const init = make(bld, composite_value_node{.ty = cty, .init = std::move(members)});
 
         return post_expr({
             .node = init, // TODO: is this correct here?

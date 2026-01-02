@@ -4,6 +4,7 @@
 #include "types/type.hpp"
 
 #include "types/bool.hpp"
+#include "types/composite.hpp"
 #include "types/const.hpp"
 #include "types/float.hpp"
 #include "types/func.hpp"

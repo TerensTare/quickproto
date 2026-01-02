@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include "nodegen/composite.hpp"
+
 // binary math
 #include "nodegen/add.hpp"
 #include "nodegen/div.hpp"

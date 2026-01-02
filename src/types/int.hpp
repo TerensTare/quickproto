@@ -150,43 +150,48 @@ struct int_top final : int_value
 
     inline value const *eq(value const *rhs) const noexcept
     {
+        // TODO: is this correct?
         return rhs->as<int_value>()
-                   ? (value const *)this
+                   ? bool_top::self()
                    : value::eq(rhs);
     }
 
     inline value const *ne(value const *rhs) const noexcept
     {
         return rhs->as<int_value>()
-                   ? (value const *)this
+                   ? bool_top::self()
                    : value::ne(rhs);
     }
 
     inline value const *lt(value const *rhs) const noexcept
     {
+        // TODO: is this correct?
         return rhs->as<int_value>()
-                   ? (value const *)this
+                   ? bool_top::self()
                    : value::lt(rhs);
     }
 
     inline value const *le(value const *rhs) const noexcept
     {
+        // TODO: is this correct?
         return rhs->as<int_value>()
-                   ? (value const *)this
+                   ? bool_top::self()
                    : value::le(rhs);
     }
 
     inline value const *gt(value const *rhs) const noexcept
     {
+        // TODO: is this correct?
         return rhs->as<int_value>()
-                   ? (value const *)this
+                   ? bool_top::self()
                    : value::gt(rhs);
     }
 
     inline value const *ge(value const *rhs) const noexcept
     {
+        // TODO: is this correct?
         return rhs->as<int_value>()
-                   ? (value const *)this
+                   ? bool_top::self()
                    : value::ge(rhs);
     }
 

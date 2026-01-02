@@ -16,7 +16,7 @@ static_assert(nodegen<loop_node>);
 inline value const *loop_node::infer(type_storage const &types) const
 {
     // TODO: hack
-    return top_type::self();
+    return top_value::self();
 }
 
 inline entt::entity loop_node::emit(builder &bld, value const *val) const

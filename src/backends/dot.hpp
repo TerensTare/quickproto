@@ -26,8 +26,8 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
     {
     case node_op::Program:
         return named_node("Program");
-    case node_op::Global:
-        return named_node("Global");
+    case node_op::GlobalMemory:
+        return named_node("GlobalMemory");
     case node_op::Start:
         return named_node("State");
 
@@ -59,6 +59,10 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
         return std::format_to(out, "[label=<string>]"); // TODO: show the contents here
     case node_op::BConst:
         return std::format_to(out, "[label=\"{}\"]", type.type->as<bool_const>()->b);
+
+        // TODO: show struct name here
+    case node_op::Struct:
+        return named_node("Struct");
 
     case node_op::Addr:
         return named_node("Addr");
