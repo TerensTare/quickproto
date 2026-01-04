@@ -6,7 +6,7 @@
 
 // TODO: maybe it's best if you split this...
 
-struct return_phi_node final
+struct phi_node final
 {
     entt::entity region;
     entt::entity lhs, rhs;
@@ -15,16 +15,18 @@ struct return_phi_node final
     inline entt::entity emit(builder &bld, value const *val) const;
 };
 
-static_assert(nodegen<return_phi_node>);
+static_assert(nodegen<phi_node>);
 
-inline value const *return_phi_node::infer(type_storage const &types) const
+inline value const *phi_node::infer(type_storage const &types) const
 {
-    // TODO: find a better type instead
-    return top_value::self();
+    return types.get(lhs).type->phi(types.get(rhs).type);
 }
 
-inline entt::entity return_phi_node::emit(builder &bld, value const *val) const
+inline entt::entity phi_node::emit(builder &bld, value const *val) const
 {
+    if (lhs == rhs)
+        return lhs;
+
     // TODO: handle case when either branch is null
     // TODO: handle multiple returns
     // TODO: ensure number of expr matches on both

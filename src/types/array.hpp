@@ -73,11 +73,19 @@ struct array_value final : composite_value
             if (auto c_i = int_i->as<int_const>(); c_i->n >= type->n_members)
                 return new out_of_bounds{type, c_i};
 
-                // TODO: return the actual value, if known
+            // TODO: return the actual value, if known
             return type->base->top();
         }
         else
             return value::index(i);
+    }
+
+    inline value const *phi(value const *other) const noexcept
+    {
+        // TODO: more concrete `join`
+        return other->as<array_value>()
+                   ? this
+                   : top_value::self();
     }
 
     array_type const *type;

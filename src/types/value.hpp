@@ -100,6 +100,9 @@ struct value
 
     // target(self)
     virtual value const *cast(type const *target) const noexcept;
+
+    // aka. `join`
+    virtual value const *phi(value const *other) const noexcept = 0;
 };
 
 // unknown value, used for nodes whose type is lazy-evaluated (eg. calls to not-yet declared functions)
@@ -117,6 +120,8 @@ struct top_value final : value
 
     inline value const *neg() const noexcept { return this; }
     inline value const *unot() const noexcept { return this; }
+
+    inline value const *phi(value const *other) const noexcept { return this; }
 };
 
 // no value at all
@@ -127,12 +132,16 @@ struct bot_value final : value
         static bot_value val;
         return &val;
     }
+
+    inline value const *phi(value const *other) const noexcept { return other; }
 };
 
 // Error that happens during the typecheck stage.
 // TODO: improve the interface of this
 struct value_error : value
 {
+    // TODO: is this correct?
+    inline value const *phi(value const *other) const noexcept final { return this; }
 };
 
 // signals that this unary operator is not implemented

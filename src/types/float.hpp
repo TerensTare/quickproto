@@ -67,6 +67,13 @@ struct float_bot final : float_value
                    ? bool_bot::self()
                    : value::lt(rhs);
     }
+
+    inline value const *phi(value const *other) const noexcept
+    {
+        return other->as<float_value>()
+                   ? other
+                   : top_value::self();
+    }
 };
 
 struct float_top final : float_value
@@ -89,6 +96,13 @@ struct float_top final : float_value
 
     inline value const *eq(value const *rhs) const noexcept { return this; }
     inline value const *lt(value const *rhs) const noexcept { return this; }
+
+    inline value const *phi(value const *other) const noexcept
+    {
+        return other->as<float_value>()
+                   ? this
+                   : top_value::self();
+    }
 };
 
 struct float32 final : float_value
@@ -170,6 +184,13 @@ struct float32 final : float_value
             return bool_bot::self();
         else
             return value::lt(rhs);
+    }
+
+    inline value const *phi(value const *other) const noexcept
+    {
+        return other->as<float_value>()
+                   ? this
+                   : top_value::self();
     }
 
     float f;
@@ -254,6 +275,25 @@ struct float64 final : float_value
             return bool_bot::self();
         else
             return value::lt(rhs);
+    }
+
+    inline value const *phi(value const *other) const noexcept
+    {
+        auto rhs = other->as<float_value>();
+        if (!rhs)
+            return top_value::self();
+
+        if (rhs->as<float_top>())
+            return rhs;
+        if (rhs->as<float_bot>())
+            return this;
+        // TODO: should be `float64_top`
+        if (auto c = rhs->as<float64>())
+            return (c->d == d) ? this : float_top::self();
+        // TODO: recheck
+        if (auto c = rhs->as<float32>())
+            return float_top::self();
+        std::unreachable();
     }
 
     double d;

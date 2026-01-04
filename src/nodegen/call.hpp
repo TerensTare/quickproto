@@ -38,7 +38,7 @@ inline value const *call_node::infer(type_storage const &types) const
 inline entt::entity call_node::emit(builder &bld, value const *val) const
 {
     // HACK: implement this in a cleaner way
-    auto const nodety = bld.reg.get<node_type>(func).type->as<::func>()->is_extern
+    auto const nodety = bld.reg.get<node_type>(func).type->as<func_const>()->is_extern
                             ? node_op::ExternCall
                             : node_op::CallStatic;
 

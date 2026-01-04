@@ -20,6 +20,13 @@ struct void_value final : value
         static void_value vty;
         return &vty;
     }
+
+    inline value const *phi(value const *other) const noexcept
+    {
+        return other->as<void_value>()
+                   ? this
+                   : top_value::self();
+    }
 };
 
 inline value const *void_type::top() const noexcept { return void_value::self(); }

@@ -31,6 +31,14 @@ struct struct_value : composite_value
     inline value const *assign(value const *rhs) const noexcept;
     inline value const *index(value const *i) const noexcept;
 
+    inline value const *phi(value const *other) const noexcept
+    {
+        // TODO: more concrete `join`
+        return other->as<struct_value>()
+                   ? this
+                   : top_value::self();
+    }
+
     struct_type const *type;
     size_t n_values;
     value const **values; // TODO: the value should "own" member values (should it?)

@@ -33,7 +33,7 @@
 #include "nodegen/loop.hpp"
 #include "nodegen/region.hpp"
 #include "nodegen/return.hpp"
-#include "nodegen/return_phi.hpp"
+#include "nodegen/phi.hpp"
 
 // memory state
 #include "nodegen/alloca.hpp"

@@ -51,6 +51,13 @@ struct bool_bot final : bool_value
                    ? rhs
                    : value::logic_or(rhs);
     }
+
+    inline value const *phi(value const *other) const noexcept
+    {
+        return other->as<bool_value>()
+                   ? other
+                   : top_value::self();
+    }
 };
 
 struct bool_const final : bool_value
@@ -117,6 +124,8 @@ struct bool_const final : bool_value
         return value::logic_or(rhs);
     }
 
+    inline value const *phi(value const *other) const noexcept;
+
     bool b;
 
 private:
@@ -160,7 +169,24 @@ struct bool_top final : bool_value
                    ? (value const *)this
                    : value::eq(rhs);
     }
+
+    inline value const *phi(value const *other) const noexcept { return other->as<bool_value>() ? this : top_value::self(); }
 };
+
+inline ::value const *bool_const::phi(value const *other) const noexcept
+{
+    // TODO: is this branch correct?
+    if (!other->as<bool_value>())
+        return top_value::self();
+    if (other->as<bool_top>())
+        return other;
+    if (auto rb = other->as<bool_const>())
+        return (rb->b == b) ? other : bool_top::self();
+    if (other->as<bool_bot>())
+        return this;
+
+    std::unreachable();
+}
 
 struct bool_type final : type
 {

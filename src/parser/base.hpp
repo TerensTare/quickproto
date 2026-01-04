@@ -326,6 +326,9 @@ private:
         }
     }
 
+    // helper to parse the `else` part of an `if` statement
+    inline entt::entity else_branch(scope const *then_env, entt::entity then_state, entt::entity then_ret) noexcept;
+
     // type
 
     // <ident> type
@@ -350,12 +353,7 @@ private:
 
     // other helpers
 
-    inline void merge(scope &parent, scope const &lhs, scope const &rhs) noexcept;
-
-    // merge `lhs` and `rhs` into a new phi node if either of the nodes is different from `old` and return it, otherwise return `old`
-    // TODO: if no `else` branch, `rhs` should be `old`
-    // TODO: move this on the nodegen API
-    inline entt::entity phi(entt::entity old, entt::entity lhs, entt::entity rhs) noexcept;
+    inline void merge(entt::entity region, scope &parent, scope const &lhs, scope const &rhs) noexcept;
 
     // codegen the `Start` and `Exit` nodes of the program, pass the control flow to `main` (and initializing globals when added).
     inline void codegen_main() noexcept;
@@ -377,7 +375,7 @@ private:
     inline static void import_builtin(::env &e) noexcept;
 };
 
-inline void parser::merge(scope &parent, scope const &lhs, scope const &rhs) noexcept
+inline void parser::merge(entt::entity region, scope &parent, scope const &lhs, scope const &rhs) noexcept
 {
     // TODO: pass the `Region` id here, don't assume or deduce it
     // invariant: `lhs` and `rhs` are branches of `parent` and never `null`
@@ -400,31 +398,11 @@ inline void parser::merge(scope &parent, scope const &lhs, scope const &rhs) noe
             auto &&lval = env.values[(uint32_t)left];
             auto &&rval = env.values[(uint32_t)right];
 
-            auto const node = phi(val, lval, rval);
+            auto const node = make(bld, phi_node{region, lval, rval});
+            // TODO: is this correct? should you update the index instead?
+            // TODO: only update iff a `Phi` is generated
             val = node;
         }
-}
-
-inline entt::entity parser::phi(entt::entity old, entt::entity lhs, entt::entity rhs) noexcept
-{
-    auto const l = lhs != old, r = rhs != old;
-    entt::entity ins[2]{old, old};
-    if (l && r)
-    {
-        ins[0] = lhs;
-        ins[1] = rhs;
-    }
-    else if (l || r)
-        ins[0] = l ? lhs : rhs;
-    else
-        return old;
-
-    // TODO: specify the type of this node
-    // HACK: generalize the value
-    auto const ret = bld.make(int_top::self(), node_op::Phi, ins);
-    (void)bld.reg.emplace<region_of_phi>(ret, old); // TODO: specify the actual region here and run passes
-
-    return ret;
 }
 
 inline void parser::fail(token const &t, std::string_view msg, std::string_view ctx) const

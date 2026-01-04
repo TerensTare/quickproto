@@ -186,6 +186,10 @@ inline entt::entity parser::if_stmt() noexcept
     eat(token_kind::KwIf);         // 'if'
     auto const cond = expr().node; // expr
 
+    // TODO: this is a type checking error, not parsing
+    if (!bld.reg.get<node_type>(cond).type->as<bool_value>())
+        fail(scan.peek, "Condition is not a boolean", ""); // TODO: add more context
+
     // TODO: recheck the type of this
     auto const if_yes_node = bld.make(top_value::self(), node_op::IfYes, std::span(&cond, 1));
     bld.reg.emplace<ctrl_effect>(if_yes_node, bld.state.ctrl);
@@ -204,74 +208,24 @@ inline entt::entity parser::if_stmt() noexcept
 
             if (scan.peek.kind == token_kind::KwElse)
             {
-                scan.next(); // 'else'
-
-                if (!((scan.peek.kind == token_kind::KwIf) || (scan.peek.kind == token_kind::LeftBrace)))
-                    fail(scan.peek, "Expected `if` or `{` after `else`!", ""); // TODO: give more context
-
-                // TODO: parse the `stmt` after the `if`, return or not
-                // if_stmt | block, then the outer `stmt` that tails
-                // TODO: also merge the `env` even on the `if` case
-                return (scan.peek.kind == token_kind::KwIf)
-                           ? [&]()
-                {
-                    // TODO: recheck everything in this case
-
-                    // HACK: do something better
-                    auto const else_ret = if_stmt();
-
-                    auto const region = make(bld, region_node{then_state, bld.state.ctrl});
-
-                    // TODO: all this is common on both branches
-                    // TODO: is this correct? (from here to return)
-                    // TODO: enable this at some point
-                    // codegen
-                    // merge(*env.top, *then_env, *else_env);
-
-                    // TODO: if either `if` or `else` has a return, codegen a phi node and return it
-                    // TODO: is this correct?
-                    // TODO: `phi` should merge the children of `return` nodes
-                    auto const merge_ret = make(bld, return_phi_node{region, then_ret, else_ret});
-
-                    return merge_ret; // TODO: recheck this
-                }()
-                           : block([&](scope const *else_env, entt::entity else_ret)
-                                   {
-                                       // TODO: this should be common for both case (`else if` or just `else`)
-                                       eat(token_kind::Semicolon); // ';'
-
-                                       auto const region = make(bld, region_node{then_state, bld.state.ctrl});
-
-                                       // TODO: all this is common on both branches
-                                       // TODO: is this correct? (from here to return)
-                                       // codegen
-                                       merge(*env.top, *then_env, *else_env);
-
-                                       // TODO: if either `if` or `else` has a return, codegen a phi node and return it
-                                       // TODO: is this correct?
-                                       // TODO: `phi` should merge the children of `return` nodes
-                                       auto const merge_ret = make(bld, return_phi_node{region, then_ret, else_ret});
-
-                                       // TODO: parse after merging nodes
-                                       // TODO: this should be yet another branch, marked as `if(false)` ie. `~ctrl`
-                                       auto const rest_ret = stmt(); // rest of block statements
-
-                                       return (merge_ret != entt::null) ? merge_ret : rest_ret; //
-                                   });
+                return else_branch(then_env, then_state, then_ret);
             }
             else
             {
                 eat(token_kind::Semicolon); // ';'
 
+                // TODO: here in case the `if` branch had a full return (ie. not conditional), this should be treated as "implicit else" by the optimizer
+                // ^ in case there is no "full return" on `if`, this branch is taken by both cases
+
                 auto const region = make(bld, region_node{then_state, bld.state.ctrl});
-                merge(*env.top, *then_env, *env.top); // TODO: is this correct?
+                merge(region, *env.top, *then_env, *env.top); // TODO: is this correct?
 
                 // TODO: implement
                 // TODO: also merge `then_env` with `env.top` in this case
                 auto const rest_ret = stmt(); // trailing stmt
 
                 // TODO: is this correct?
-                return make(bld, return_phi_node{region, then_ret, rest_ret});
+                return make(bld, phi_node{region, then_ret, rest_ret});
             } //
         });
 }
@@ -333,8 +287,9 @@ inline entt::entity parser::for_range_stmt() noexcept
 
                                    // TODO: all this is common on both branches
                                    // TODO: is this correct? (from here to return)
+                                   // TODO: pass the region here
                                    // codegen
-                                   merge(*env.top, *loop_env, *env.top);
+                                   merge(loop, *env.top, *loop_env, *env.top);
 
                                    // TODO: generate the "loop-back" node
 
@@ -355,6 +310,7 @@ inline entt::entity parser::for_range_stmt() noexcept
 inline entt::entity parser::for_cond_stmt() noexcept
 {
     // TODO: everything here is temporary, fix the problems eventually
+    // TODO: make sure the condition is boolean-like
 
     // parsing
     auto cond = expr().node; // expr
@@ -374,7 +330,7 @@ inline entt::entity parser::for_cond_stmt() noexcept
                                    // TODO: all this is common on both branches
                                    // TODO: is this correct? (from here to return)
                                    // codegen
-                                   merge(*env.top, *loop_env, *env.top);
+                                   merge(region, *env.top, *loop_env, *env.top);
 
                                    // TODO: generate the "loop-back" node
 
@@ -596,4 +552,71 @@ inline entt::entity parser::stmt() noexcept
     default:
         return simple_stmt();
     }
+}
+
+// helpers
+
+inline entt::entity parser::else_branch(scope const *then_env, entt::entity then_state, entt::entity then_ret) noexcept
+{
+    eat(token_kind::KwElse); // 'else'
+
+    switch (scan.peek.kind)
+    {
+    case token_kind::KwIf:
+    case token_kind::LeftBrace:
+        break;
+
+    default:
+        fail(scan.peek, "Expected `if` or `{` after `else`!", ""); // TODO: give more context
+    }
+
+    // TODO: parse the `stmt` after the `if`, return or not
+    // if_stmt | block, then the outer `stmt` that tails
+    // TODO: also merge the `env` even on the `if` case
+    return (scan.peek.kind == token_kind::KwIf)
+               ? [&]()
+    {
+        // TODO: recheck everything in this case
+
+        // HACK: do something better
+        auto const else_ret = if_stmt();
+
+        auto const region = make(bld, region_node{then_state, bld.state.ctrl});
+
+        // TODO: all this is common on both branches
+        // TODO: is this correct? (from here to return)
+        // TODO: enable this at some point
+        // codegen
+        // merge(*env.top, *then_env, *else_env);
+
+        // TODO: if either `if` or `else` has a return, codegen a phi node and return it
+        // TODO: is this correct?
+        // TODO: `phi` should merge the children of `return` nodes
+        auto const merge_ret = make(bld, phi_node{region, then_ret, else_ret});
+
+        return merge_ret; // TODO: recheck this
+    }()
+               : block([&](scope const *else_env, entt::entity else_ret)
+                       {
+                           // TODO: this should be common for both case (`else if` or just `else`)
+                           eat(token_kind::Semicolon); // ';'
+
+                           auto const region = make(bld, region_node{then_state, bld.state.ctrl});
+
+                           // TODO: all this is common on both branches
+                           // TODO: is this correct? (from here to return)
+                           // codegen
+                           merge(region, *env.top, *then_env, *else_env);
+
+                           // TODO: if either `if` or `else` has a return, codegen a phi node and return it
+                           // TODO: is this correct?
+                           // TODO: `phi` should merge the children of `return` nodes
+                           auto const merge_ret = make(bld, phi_node{region, then_ret, else_ret});
+
+                           // TODO: parse after merging nodes
+                           // TODO: this should be yet another branch, marked as `if(false)` ie. `~ctrl`
+                           auto const rest_ret = stmt(); // rest of block statements
+
+                           return (merge_ret != entt::null) ? merge_ret : rest_ret; //
+                       });
 }

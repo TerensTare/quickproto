@@ -106,6 +106,13 @@ struct int_bot final : int_value
                    ? bool_bot::self()
                    : value::ge(rhs);
     }
+
+    inline value const *phi(value const *other) const noexcept
+    {
+        return other->as<int_value>()
+                   ? other
+                   : top_value::self();
+    }
 };
 
 struct int_top final : int_value
@@ -214,6 +221,13 @@ struct int_top final : int_value
         return rhs->as<int_value>()
                    ? (value const *)this
                    : value::bor(rhs);
+    }
+
+    inline value const *phi(value const *other) const noexcept
+    {
+        return other->as<int_value>()
+                   ? this
+                   : top_value::self();
     }
 };
 
@@ -407,6 +421,20 @@ struct int_const final : int_value
             return new invalid_cast{this, target};
     }
 
+    inline value const *phi(value const *other) const noexcept
+    {
+        auto i = other->as<int_value>();
+        if (!i)
+            return top_value::self();
+
+        if (i->as<int_top>())
+            return i;
+        if (auto ci = i->as<int_const>())
+            return (ci->n != n) ? int_top::self() : this;
+        if (i->as<int_bot>())
+            return this;
+    }
+
     int64_t n;
 
 private:
@@ -419,6 +447,12 @@ struct int_range final : int_value
 {
     inline int_range(int64_t lo = INT64_MIN, int64_t hi = INT64_MAX) noexcept
         : lo{lo}, hi{hi} {}
+
+    // TODO: implement
+    inline value const *phi(value const *other) const noexcept
+    {
+        return top_value::self();
+    }
 
     int64_t lo, hi;
 };

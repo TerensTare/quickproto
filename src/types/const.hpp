@@ -3,7 +3,7 @@
 
 #include "types/value.hpp"
 
-struct assign_to_const_type final : value
+struct assign_to_const_type final : value_error
 {
 };
 

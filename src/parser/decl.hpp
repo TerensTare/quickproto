@@ -493,9 +493,9 @@ inline void parser::codegen_main() noexcept
 
     auto const main_node = env.values[(uint32_t)main_iter->second];
     auto const main_ty = bld.reg.get<node_type const>(main_node).type;
-    ensure(main_ty->as<func>(), "`main` should be a function!");
+    ensure(main_ty->as<func_const>(), "`main` should be a function!");
     // HACK: check the type instead
-    ensure(main_ty->as<func>()->ret->as<void_value>(), "`main` cannot return a value!");
+    ensure(main_ty->as<func_const>()->ret->as<void_value>(), "`main` cannot return a value!");
 
     // TODO: should you pass `main_node` to the inputs of the function?
     auto const call_main = make(bld, call_node{.func = main_node});
