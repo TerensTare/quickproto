@@ -100,6 +100,9 @@ struct expr_info final
     // ^ The `hashed_name` for the base `value` of the expression if assignable; `no_name` otherwise
 };
 
+template <bool AsStmt>
+using rule_result = std::conditional_t<AsStmt, entt::entity, void>;
+
 struct parser final
 {
     using block_then = function_ref<entt::entity(scope const *, entt::entity)>;
@@ -242,30 +245,31 @@ struct parser final
     // HACK: handle `extern` just like other annotations
     inline void extern_func_decl() noexcept;
 
-    // 'const' <ident> '=' expr ';' decl
+    // ( const_list | single_const ) decl
+    // const_list   ::= 'const' '(' const_body* ')' ';'
+    // single_const ::= 'const' const_body
     // TODO: make this a statement too
     inline void const_decl() noexcept;
-    // ( typed_var | untyped_var ) ';' stmt-or-decl
-    // typed_var   ::= 'var' <ident> type ( '=' expr )?
-    // untyped_var ::= 'var' <ident> type? '=' expr
-    // - ie. you have to either specify the type and omit the initializer or specify the initializer and omit the type, or you can specify both
-    // - in case you omit the initializer, the value is zero-init
+
+    // ( var_list | single_var ) stmt-or-decl
+    // var_list   ::= 'var' '(' var_body* ')' ';'
+    // single_var ::= 'var' var_body
     // - if parsed inside a block, this is treated as a statement and is followed by a `stmt` rather than a decl
     template <bool AsStmt>
-    inline auto var_decl() noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>;
+    inline auto var_decl() noexcept -> rule_result<AsStmt>;
     // struct_decl | alias_decl
     // if parsed inside a block, this is treated as a statement and is followed by a `stmt` rather than a decl
     template <bool AsStmt>
-    inline auto type_decl() noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>;
+    inline auto type_decl() noexcept -> rule_result<AsStmt>;
     // 'type' <ident> type ';' stmt-or-decl
     // if parsed inside a block, this is treated as a statement and is followed by a `stmt` rather than a decl
     template <bool AsStmt>
-    inline auto alias_decl(token nametok) noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>;
+    inline auto alias_decl(token nametok) noexcept -> rule_result<AsStmt>;
     // 'type' <ident> 'struct' '{' (member_decl ';')* '}' ';' stmt-or-decl
     // member_decl ::= <ident> type
     // TODO: is `member_decl` and `param_decl` the same rule?
     template <bool AsStmt>
-    inline auto struct_decl(token nametok) noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>;
+    inline auto struct_decl(token nametok) noexcept -> rule_result<AsStmt>;
 
     // const_decl | func_decl | var_decl | type_decl
     // func_decl ::= extern_func_decl | inline_func_decl
@@ -325,6 +329,19 @@ private:
             }
         }
     }
+
+    // ( typed_var | untyped_var ) ';'
+    // typed_var   ::= 'var' <ident> type ( '=' expr )?
+    // untyped_var ::= 'var' <ident> type? '=' expr
+    // - ie. you have to either specify the type and omit the initializer or specify the initializer and omit the type, or you can specify both
+    // - in case you omit the initializer, the value is zero-init
+    // ^ NOTE: this rule does not recursively parse the rest of the code, that is done in `var_decl`
+    template <bool AsStmt>
+    inline void var_body() noexcept;
+
+    // <ident> '=' expr ';'
+    // ^ NOTE: this rule does not recursively parse the rest of the code, that is done in `const_decl`
+    inline void const_body() noexcept;
 
     // helper to parse the `else` part of an `if` statement
     inline entt::entity else_branch(scope const *then_env, entt::entity then_state, entt::entity then_ret) noexcept;

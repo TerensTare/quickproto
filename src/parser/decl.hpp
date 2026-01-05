@@ -155,32 +155,36 @@ inline void parser::extern_func_decl() noexcept
 
 inline void parser::const_decl() noexcept
 {
-    eat(token_kind::KwConst);                 // 'const'
-    auto const name = eat(token_kind::Ident); // <ident>
-    eat(token_kind::Equal);                   // '='
-    auto const init = expr().node;            // expr
-    rule_sep<false>();                        // ';' or <end-of-file>
-    // ^ TODO: use AsStmt when enabling const declarations in function body
+    // parsing
 
-    // TODO: link a `Proj` node from the global `State`
-    // TODO: typecheck in case the type is specified
-    // entt::entity const ins[]{init};
-    // auto const store = bld.make(node_op::Store, ins);
-    // auto &&ty = bld.reg.get<node_type>(store).type;
-    // bld.reg.get<node_type>(store).type = new const_type{ty};
-    // bld.reg.get_or_emplace<effect>(store).target = mem_state;
-    // mem_state = store;
+    eat(token_kind::KwConst); // 'const'
 
-    // TODO: mark the name as non-modifiable somehow
-    env.new_value(name.hash, init);
+    switch (scan.peek.kind)
+    {
+    case token_kind::LeftParen:
+    {
+        scan.next(); // '('
+        while (scan.peek.kind != token_kind::RightParen)
+            const_body(); // const_body*
 
-    // TODO: `prune_dead_code` is common for every declaration, find a way to address this
-    // ^ merge `prune_dead_code` and `decl` so you don't jump around; make sure it's a tail call
-    // NOTE: you still need to prune here to cut temporary nodes
-    prune_dead_code(bld, init);
+        eat(token_kind::RightParen); // ')'
+        rule_sep<false>();           // TODO: adapt to stmt
 
-    // TODO: inline CPS this
-    decl();
+        // TODO: adapt to `stmt`
+        return decl();
+    }
+
+    case token_kind::Ident:
+    {
+        const_body(); // rest
+
+        // TODO: adapt to `stmt`
+        return decl();
+    }
+
+    default:
+        fail(scan.peek, "Expected `(` or <ident>", ""); // TODO: add more context
+    }
 }
 
 template <bool AsStmt>
@@ -188,69 +192,42 @@ inline auto parser::var_decl() noexcept -> std::conditional_t<AsStmt, decltype(s
 {
     // parsing
 
-    eat(token_kind::KwVar);                   // 'var'
-    auto const name = eat(token_kind::Ident); // <ident>
-    ::type const *ty = nullptr;
-    entt::entity init;
-
-    // TODO: simplify this
-    // untyped_var
-    if (scan.peek.kind == token_kind::Equal)
+    eat(token_kind::KwVar); // 'var'
+    switch (scan.peek.kind)
     {
-        scan.next();        // '='
-        init = expr().node; // expr
-        // TODO: initialize ty to typeof(expr)
-    }
-    else
+    case token_kind::LeftParen:
     {
-        ty = type(); // type?
+        scan.next(); // '('
+        while (scan.peek.kind != token_kind::RightParen)
+            var_body<AsStmt>(); // var_body*
 
-        if (scan.peek.kind == token_kind::Equal)
-        {
-            // TODO: typecheck in this case using assignability
-            scan.next();        // '='
-            init = expr().node; // expr
-        }
-        else // just make the value either way, parsing then fails if an unexpected token follows
-        {
-            init = make(bld, value_node{ty->zero()});
-        }
+        eat(token_kind::RightParen); // ')'
+        rule_sep<AsStmt>();
+
+        // no `prune_dead_code` here as it is taken care in `var_body`
+        if constexpr (AsStmt)
+            return stmt();
+        else
+            return decl();
     }
 
-    if constexpr (!AsStmt)
+    case token_kind::Ident:
     {
-        // HACK: recheck this
-        auto const alloc = make(bld, alloca_node{ty});
-        init = make(bld, store_node{
-                             .lhs = alloc,
-                             .offset = int_const::make(0),
-                             .rhs = init,
-                         });
+        var_body<AsStmt>(); // rest
+
+        if constexpr (AsStmt)
+            return stmt();
+        else
+            return decl();
     }
 
-    rule_sep<AsStmt>(); // ';' or <end-of-file>
-
-    // TODO: type check, if present
-
-    // codegen
-
-    env.new_value(name.hash, init);
-
-    if constexpr (AsStmt)
-        return stmt();
-    else
-    {
-        // TODO: `prune_dead_code` is common for every declaration, find a way to address this
-        // ^ merge `prune_dead_code` and `decl` so you don't jump around; make sure it's a tail call
-        // - probably it's best to tail-call `decl` from `prune_dead_code`
-        prune_dead_code(bld, init);
-
-        decl();
+    default:
+        fail(scan.peek, "Expected `(` or <ident>", ""); // TODO: add more context
     }
 }
 
 template <bool AsStmt>
-inline auto parser::type_decl() noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>
+inline auto parser::type_decl() noexcept -> rule_result<AsStmt>
 {
     // parsing
 
@@ -268,7 +245,7 @@ inline auto parser::type_decl() noexcept -> std::conditional_t<AsStmt, decltype(
 }
 
 template <bool AsStmt>
-inline auto parser::alias_decl(token nametok) noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>
+inline auto parser::alias_decl(token nametok) noexcept -> rule_result<AsStmt>
 {
     auto ty = type();   // type
     rule_sep<AsStmt>(); // ';' or <end-of-file>
@@ -292,7 +269,7 @@ inline auto parser::alias_decl(token nametok) noexcept -> std::conditional_t<AsS
 }
 
 template <bool AsStmt>
-inline auto parser::struct_decl(token nametok) noexcept -> std::conditional_t<AsStmt, decltype(stmt()), void>
+inline auto parser::struct_decl(token nametok) noexcept -> rule_result<AsStmt>
 {
     auto parse_members = [&](this auto &&self, stacklist<member_decl> *members, size_t n) -> ::type const *
     {
@@ -468,6 +445,79 @@ inline smallvec<::type const *> parser::param_list() noexcept
 
     eat(token_kind::RightParen); // ')'
     return {.n = 0, .entries = std::unique_ptr<::type const *[]>(nullptr)};
+}
+
+template <bool AsStmt>
+inline void parser::var_body() noexcept
+{
+    auto const name = eat(token_kind::Ident); // <ident>
+    ::type const *ty = nullptr;
+    entt::entity init;
+
+    // TODO: simplify this
+    // untyped_var
+    if (scan.peek.kind == token_kind::Equal)
+    {
+        scan.next();        // '='
+        init = expr().node; // expr
+        // TODO: initialize ty to typeof(expr)
+    }
+    else
+    {
+        ty = type(); // type?
+
+        if (scan.peek.kind == token_kind::Equal)
+        {
+            // TODO: typecheck in this case using assignability
+            scan.next();        // '='
+            init = expr().node; // expr
+        }
+        else // just make the value either way, parsing then fails if an unexpected token follows
+        {
+            init = make(bld, value_node{ty->zero()});
+        }
+    }
+
+    if constexpr (!AsStmt)
+    {
+        // HACK: recheck this
+        auto const alloc = make(bld, alloca_node{ty});
+        init = make(bld, store_node{
+                             .lhs = alloc,
+                             .offset = int_const::make(0),
+                             .rhs = init,
+                         });
+    }
+
+    rule_sep<AsStmt>(); // ';' or <end-of-file>
+
+    // TODO: type check, if present
+
+    // codegen
+
+    if constexpr (!AsStmt)
+        prune_dead_code(bld, init);
+
+    env.new_value(name.hash, init);
+}
+
+inline void parser::const_body() noexcept
+{
+    // parsing
+
+    auto const name = eat(token_kind::Ident); // <ident>
+    eat(token_kind::Equal);                   // '='
+    auto const init = expr().node;            // expr
+    rule_sep<false>();                        // ';' or <end-of-file>
+    // ^ TODO: use AsStmt when enabling const declarations in function body
+
+    // codegen
+
+    // TODO: this value should be a compile-time constant, so there is really no need to prune code here, is it?
+    prune_dead_code(bld, init);
+
+    // TODO: mark the name as non-modifiable somehow
+    env.new_value(name.hash, init);
 }
 
 // codegen helpers
