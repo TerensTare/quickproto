@@ -20,7 +20,7 @@ static_assert(nodegen<exit_node>);
 inline value const *exit_node::infer(type_storage const &types) const
 {
     // HACK: use another type for this node
-    return int_top::self();
+    return int_value::top();
 }
 
 inline entt::entity exit_node::emit(builder &bld, value const *val) const

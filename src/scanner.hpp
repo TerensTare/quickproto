@@ -37,7 +37,7 @@ private:
 
 struct scanner_iter final
 {
-    inline token_kind next() noexcept;
+    inline token_kind next(hashed_name &name) noexcept;
 
     // TODO: do you need this anymore?
     constexpr bool eat(uchar c) noexcept { return text.eat(c); }
@@ -51,6 +51,12 @@ struct scanner_iter final
     // hex ::= '0' ('x' | 'X') h* - where h ::= '0'-'9' | 'a'-'f' | 'A'-'F'
     // flt ::= '0' '.' d* - where d ::= '0'-'9'
     inline token_kind zero_rule() noexcept;
+
+    // identifier or keyword
+    inline token_kind ident_or_kw(hashed_name &name) noexcept;
+
+    // only identifier
+    inline token_kind ident(hashed_name &name) noexcept;
 
     uchars text;
 };
@@ -113,31 +119,15 @@ inline token scanner::next() noexcept
         : iter.skip_ws<false>();
 
     auto const start = uint32_t(iter.text.chars - text);
-    auto const next = iter.next();
+    hashed_name hash{};
+    auto const next = iter.next(hash);
 
     peek = token{
         .kind = next,
+        .hash = hash,
         .start = start,
         .len = uint32_t(iter.text.chars - text) - start,
     };
-
-    // TODO: do something more efficient
-    // probably best to take care of this branch when parsing the token kind (you are double checking here)
-    if (peek.kind == token_kind::Ident)
-    {
-        // invariant: you know identifiers are always ascii
-        auto const str = lexeme(peek);
-
-        peek.hash = (hashed_name)(uint32_t)entt::hashed_string::value(str.data(), str.size());
-
-        // TODO: use the hash here (maybe) keep a simple array and match?
-        // ^ or rather, keep 2 arrays; one for the hashes one for the kind
-
-        if (auto const iter = keywords.find(str); iter != keywords.end())
-        {
-            peek.kind = iter->second;
-        }
-    }
 
     return old;
 }
@@ -342,7 +332,95 @@ oct:
     return Integer;
 }
 
-inline token_kind scanner_iter::next() noexcept
+inline token_kind scanner_iter::ident_or_kw(hashed_name &hash) noexcept
+{
+    using enum token_kind;
+
+    auto const start = text.chars - 1;
+
+    // TODO: can you optimize this further?
+    token_kind ret = Ident;
+
+    while (auto ch = *text)
+    {
+        if (is_alphanum(ch))
+            text.next_ascii();
+        else if (is_utf8(ch))
+        {
+            text.next_utf8();
+            goto unicode_ident_or_kw;
+        }
+        else
+            break;
+    }
+
+    {
+        // TODO: do something more efficient here (you get the hash of this identifier twice: once for the token and once for the lookup)
+        auto const str = std::string_view{(char const *)start, (char const *)text.chars};
+
+        if (auto const iter = keywords.find(str); iter != keywords.end())
+            ret = iter->second;
+
+        // invariant: this part of the string is ASCII
+        hash = (hashed_name)entt::basic_hashed_string<uchar>::value(start, text.chars - start);
+
+        return ret;
+    }
+
+unicode_ident_or_kw:
+    while (auto ch = *text)
+    {
+        if (is_alphanum(ch))
+            text.next_ascii();
+        else if (is_utf8(ch))
+            text.next_utf8();
+        else
+            break;
+    }
+
+    return UnicodeIdent;
+}
+
+inline token_kind scanner_iter::ident(hashed_name &hash) noexcept
+{
+    using enum token_kind;
+
+    auto const start = text.chars - 1;
+
+    // TODO: is it best to have separate loops for this?
+    while (auto ch = *text)
+    {
+        if (is_alphanum(ch))
+            text.next_ascii();
+        else if (is_utf8(ch))
+        {
+            text.next_utf8();
+            goto unicode_ident;
+        }
+        else
+            break;
+    }
+
+    // invariant: identifiers are always ASCII
+    hash = (hashed_name)entt::basic_hashed_string<uchar>::value(start, text.chars - start);
+
+    return Ident;
+
+unicode_ident:
+    while (auto ch = *text)
+    {
+        if (is_alphanum(ch))
+            text.next_ascii();
+        else if (is_utf8(ch))
+            text.next_utf8();
+        else
+            break;
+    }
+
+    return UnicodeIdent;
+}
+
+inline token_kind scanner_iter::next(hashed_name &hash) noexcept
 {
     using enum token_kind;
 
@@ -407,15 +485,23 @@ inline token_kind scanner_iter::next() noexcept
                    ? EqualEqual
                    : Equal;
 
-    case '>':
-        return eat('=')
-                   ? GreaterEqual
-                   : Greater;
-
     case '<':
+        if (eat('<'))
+            return eat('=')
+                       ? LshiftEqual
+                       : Lshift;
         return eat('=')
                    ? LessEqual
                    : Less;
+
+    case '>':
+        if (eat('<'))
+            return eat('=')
+                       ? RshiftEqual
+                       : Rshift;
+        return eat('=')
+                   ? GreaterEqual
+                   : Greater;
 
     case '&':
         return eat('&')
@@ -487,27 +573,11 @@ inline token_kind scanner_iter::next() noexcept
         return zero_rule();
 
     default:
-        if (is_alpha(ch))
-        {
-            // TODO: can you optimize this further?
-            token_kind ret = Ident;
-
-            // TODO: is it best to have separate loops for this?
-            while (auto ch = *text)
-            {
-                if (is_alphanum(ch))
-                    text.next_ascii();
-                else if (is_utf8(ch))
-                {
-                    ret = UnicodeIdent;
-                    text.next_utf8();
-                }
-                else
-                    break;
-            }
-
-            return ret;
-        }
+        // this might be a keyword
+        if (ch >= 'a' && ch <= 'z')
+            return ident_or_kw(hash);
+        else if (is_alpha(ch)) // but this is not a keyword for sure
+            return ident(hash);
         else if (is_dec(ch)) // invariant: ch is never 0 here
         {
             while (is_dec(*text))

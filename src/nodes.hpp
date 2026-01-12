@@ -50,7 +50,7 @@ enum class node_op : uint8_t
              // ^ this is the "local memory" node of a function (in terms of memory) + the "function start" in terms of control flow
     // TODO: Package node
     GlobalMemory, // GlobalMemory - like `Program` but at global level only (ie. this does not include local/heap allocations or local control flow)
-    Start,  // Start - like `Program` but for a function
+    Start,        // Start - like `Program` but for a function
 
     Load,   // Load In=[somePlace, indexNode; memState]
     Store,  // Store In=[dstPlace, indexNode, srcPlace; memState]
@@ -82,6 +82,9 @@ enum class node_op : uint8_t
     BitXor,
     BitOr,
 
+    ShiftLeft,
+    ShiftRight,
+
     // floating point operations
     Fadd,
     Fsub,
@@ -111,7 +114,7 @@ enum class node_op : uint8_t
     BConst, // BConst Value=someBool
     Struct, // Struct Value=structValue In=[members...]
 
-    Error,  // TODO: temporary hack
+    Error, // TODO: temporary hack
 };
 
 // component

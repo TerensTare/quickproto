@@ -80,15 +80,11 @@ var_env merge(var_env const &parent, var_env const &left, var_env const &right) 
 enum class parse_prec : uint8_t
 {
     None,
-    Or,         // ||
-    And,        // &&
-    Equality,   // == !=
-    Comparison, // < <= >= >
-    BitOr,      // |
-    BitXor,     // ^
-    BitAnd,     // &
-    Term,       // + -
-    Factor,     // * /
+    Or,             // ||
+    And,            // &&
+    Comparison,     // == != < <= >= >
+    Addition,       // + - | ^
+    Multiplication, // * / << >> &
 };
 
 static constexpr hashed_name no_name = hashed_name{(entt::id_type)entt::hashed_string::value("<no-name>")};
@@ -145,7 +141,11 @@ struct parser final
     inline expr_info primary() noexcept;
 
     // expr ::= primary ( <binary_op> expr(<binary_op-prec>) )*
-    // <binary_op> ::= '||' | '&&' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '+' | '-' | '*' | '/' | '&' | '^' | '|'
+    // <binary_op> ::= '||'
+    //               | '&&'
+    //               | '==' | '!=' | '<' | '<=' | '>' | '>='
+    //               | '+' | '-' | '|' | '^'
+    //               | '*' | '/' | '<<' | '>>' | '&'
     // ^ how much is parsed by a specific call to `expr` depends on the precedence level parsed
     [[nodiscard]]
     inline expr_info expr(parse_prec prec = parse_prec::None) noexcept;
@@ -525,7 +525,19 @@ inline void parser::import_builtin(::env &e) noexcept
 
     // TODO: use a singleton here for now
     e.new_type((hashed_name)(uint32_t)"bool"_hs, new bool_type);
+
     e.new_type((hashed_name)(uint32_t)"int"_hs, new sint_type);
+    // HACK: do something better here
+    e.new_type((hashed_name)(uint32_t)"int8"_hs, new sized_int_type<int8_t>);
+    e.new_type((hashed_name)(uint32_t)"int16"_hs, new sized_int_type<int16_t>);
+    e.new_type((hashed_name)(uint32_t)"int32"_hs, new sized_int_type<int32_t>);
+    e.new_type((hashed_name)(uint32_t)"int64"_hs, new sized_int_type<int64_t>);
+
+    e.new_type((hashed_name)(uint32_t)"uint8"_hs, new sized_int_type<uint8_t>);
+    e.new_type((hashed_name)(uint32_t)"uint16"_hs, new sized_int_type<uint16_t>);
+    e.new_type((hashed_name)(uint32_t)"uint32"_hs, new sized_int_type<uint32_t>);
+    e.new_type((hashed_name)(uint32_t)"uint64"_hs, new sized_int_type<uint64_t>);
+
     e.new_type((hashed_name)(uint32_t)"float64"_hs, new float64_type);
     e.new_type((hashed_name)(uint32_t)"rune"_hs, new rune_type);
     e.new_type((hashed_name)(uint32_t)"string"_hs, new string_type);

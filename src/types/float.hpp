@@ -94,8 +94,8 @@ struct float_top final : float_value
 
     inline value const *neg() const noexcept { return this; }
 
-    inline value const *eq(value const *rhs) const noexcept { return this; }
-    inline value const *lt(value const *rhs) const noexcept { return this; }
+    inline value const *eq(value const *rhs) const noexcept { return bool_top::self(); }
+    inline value const *lt(value const *rhs) const noexcept { return bool_top::self(); }
 
     inline value const *phi(value const *other) const noexcept
     {

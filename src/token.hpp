@@ -35,6 +35,11 @@ enum class token_kind : uint8_t
     Xor,      // ^
     XorEqual, // ^=
 
+    Lshift,      // <<
+    LshiftEqual, // <<=
+    Rshift,      // >>
+    RshiftEqual, // >>=
+
     At,        // @
     Comma,     // ,
     Dot,       // .

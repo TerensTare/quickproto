@@ -11,19 +11,21 @@ static constexpr auto prec_table = []()
 
     table[(uint8_t)token_kind::OrOr] = parse_prec::Or;
     table[(uint8_t)token_kind::AndAnd] = parse_prec::And;
-    table[(uint8_t)token_kind::EqualEqual] = parse_prec::Equality;
-    table[(uint8_t)token_kind::BangEqual] = parse_prec::Equality;
+    table[(uint8_t)token_kind::EqualEqual] = parse_prec::Comparison;
+    table[(uint8_t)token_kind::BangEqual] = parse_prec::Comparison;
     table[(uint8_t)token_kind::Greater] = parse_prec::Comparison;
     table[(uint8_t)token_kind::GreaterEqual] = parse_prec::Comparison;
     table[(uint8_t)token_kind::Less] = parse_prec::Comparison;
     table[(uint8_t)token_kind::LessEqual] = parse_prec::Comparison;
-    table[(uint8_t)token_kind::Or] = parse_prec::BitOr;
-    table[(uint8_t)token_kind::Xor] = parse_prec::BitXor;
-    table[(uint8_t)token_kind::And] = parse_prec::BitAnd;
-    table[(uint8_t)token_kind::Plus] = parse_prec::Term;
-    table[(uint8_t)token_kind::Minus] = parse_prec::Term;
-    table[(uint8_t)token_kind::Star] = parse_prec::Factor;
-    table[(uint8_t)token_kind::Slash] = parse_prec::Factor;
+    table[(uint8_t)token_kind::Plus] = parse_prec::Addition;
+    table[(uint8_t)token_kind::Minus] = parse_prec::Addition;
+    table[(uint8_t)token_kind::Or] = parse_prec::Addition;
+    table[(uint8_t)token_kind::Xor] = parse_prec::Addition;
+    table[(uint8_t)token_kind::Star] = parse_prec::Multiplication;
+    table[(uint8_t)token_kind::Slash] = parse_prec::Multiplication;
+    table[(uint8_t)token_kind::And] = parse_prec::Multiplication;
+    table[(uint8_t)token_kind::Lshift] = parse_prec::Multiplication;
+    table[(uint8_t)token_kind::Rshift] = parse_prec::Multiplication;
 
     return table;
 }();
@@ -131,8 +133,8 @@ inline expr_info parser::member(expr_info base) noexcept
         fail(mem, "Member not present in type", ""); // TODO: say something better here
 
     // TODO: find a better way to represent `Load`s at known indices
-    // TODO: `int_const` is int64 but `offset` is int32
-    auto const offset_node = make(bld, value_node{int_const::make(offset)});
+    // TODO: `int_lit` is int64 but `offset` is int32
+    auto const offset_node = make(bld, value_node{int_value::make(offset)});
 
     // TODO: is this correct? (consider mutability, generalizing `Load`, etc.)
     // TODO: calculate the offset of the member and pass it to the load nodes
@@ -196,7 +198,7 @@ inline expr_info parser::primary() noexcept
         std::from_chars(txt.data(), txt.data() + txt.size(), val);
         // HACK: figure out actual int size (8/16/32/64)
         return {
-            .node = make(bld, value_node{int_const::make(val)}),
+            .node = make(bld, value_node{int_value::make(val)}),
             // integers are not assignable to
             .assign = no_name,
         };
@@ -404,7 +406,6 @@ inline smallvec<entt::entity> parser::expr_list() noexcept
 inline entt::entity parser::binary_node(token_kind kind, entt::entity lhs, entt::entity rhs) noexcept
 {
     using enum token_kind;
-    using enum node_op;
 
     switch (kind)
     {
@@ -441,6 +442,11 @@ inline entt::entity parser::binary_node(token_kind kind, entt::entity lhs, entt:
         return make(bld, bit_xor_node{lhs, rhs});
     case Or:
         return make(bld, bit_or_node{lhs, rhs});
+
+    case Lshift:
+        return make(bld, shift_left_node{lhs, rhs});
+    case Rshift:
+        return make(bld, shift_right_node{lhs, rhs});
 
     default:
         std::unreachable();

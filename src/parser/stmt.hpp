@@ -127,7 +127,7 @@ inline entt::entity parser::post_op(expr_info lhs) noexcept
 
     // auto const name = str.intern(id);
     // auto const lhs = env.get_var(name);
-    auto const rhs = make(bld, value_node{int_const::make(1)});
+    auto const rhs = make(bld, value_node{int_value::make(1)});
 
     auto const opnode = optok == token_kind::PlusPlus
                             ? make(bld, add_node{lhs.node, rhs})
@@ -258,8 +258,8 @@ inline entt::entity parser::for_range_stmt() noexcept
     auto const loop = make(bld, loop_node{});
 
     // TODO: make sure `bound` is a positive integer expression; the `<` takes care of that but the error message can be better
-    auto const counter = make(bld, value_node{int_const::make(0)});
-    auto const one = make(bld, value_node{int_const::make(1)});
+    auto const counter = make(bld, value_node{int_value::make(0)});
+    auto const one = make(bld, value_node{int_value::make(1)});
 
     // TODO: figure out the exact value of this node
     entt::entity const counter_plus_one_args[]{counter, one};

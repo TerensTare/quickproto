@@ -7,11 +7,7 @@
 // TODO:
 // - rhs <op> bot is not an error
 // - `index_as_const`
-// - have a common interface for operators, then each sub-type implements its own version
-// ^ eg. `add` is `+`, but `int + int` is `iadd`
-// - separate float32 from float64
 // ^ `float32_bot` and `float64_bot` are two distinct types; same for top, etc.
-// - `top` and `bot` should have a common representation for `value` types; and `top` should "bubble out" when encountered
 // - `value.assign`, a non-customizable call that just sets `lhs = rhs`, but unless `lhs` is NOT assignable from `rhs`
 // - what is the type of an error?
 // - use a custom typeid solution, rather than dynamic cast
@@ -32,7 +28,7 @@ struct value
         return dynamic_cast<T const *>(this);
     }
 
-    // HACK: do something better here (can you deduce it from the alias class?)
+    // HACK: do something better here
     virtual bool is_const() const { return false; }
 
     // TODO: recheck this
@@ -56,6 +52,11 @@ struct value
     virtual value const *bxor(value const *rhs) const noexcept;
     // lhs | rhs
     virtual value const *bor(value const *rhs) const noexcept;
+
+    // lhs << rhs
+    virtual value const *lsh(value const *rhs) const noexcept;
+    // lhs >> rhs
+    virtual value const *rsh(value const *rhs) const noexcept;
 
     // unary
     // -self
@@ -102,7 +103,7 @@ struct value
     virtual value const *cast(type const *target) const noexcept;
 
     // aka. `join`
-    virtual value const *phi(value const *other) const noexcept = 0;
+    virtual value const *phi(value const *other) const noexcept;
 };
 
 // unknown value, used for nodes whose type is lazy-evaluated (eg. calls to not-yet declared functions)
@@ -282,6 +283,25 @@ inline value const *value::bor(value const *rhs) const noexcept
     return rhs->as<top_value>()
                ? rhs
                : new binary_op_not_implemented_type{"|", this, rhs};
+}
+
+inline value const *value::lsh(value const *rhs) const noexcept
+{
+    return rhs->as<top_value>()
+               ? rhs
+               : new binary_op_not_implemented_type{"<<", this, rhs};
+}
+
+inline value const *value::rsh(value const *rhs) const noexcept
+{
+    return rhs->as<top_value>()
+               ? rhs
+               : new binary_op_not_implemented_type{">>", this, rhs};
+}
+
+inline value const *value::phi(value const *rhs) const noexcept
+{
+    return top_value::self();
 }
 
 // TODO: use a custom error for this

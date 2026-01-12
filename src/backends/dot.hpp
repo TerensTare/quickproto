@@ -47,7 +47,7 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
 
         // HACK: use a separate function to print the type
     case node_op::Proj:
-        // return std::format_to(out, "[label=\"Proj({})\"]", type.type->as<int_const>()->n);
+        // return std::format_to(out, "[label=\"Proj({})\"]", type.type->as<int_lit>()->n);
         // HACK: temporary
         return std::format_to(out, "[label=\"Proj\"]");
 

@@ -25,7 +25,7 @@ inline entt::entity add_node::emit(builder &bld, value const *val) const
     // TODO: only do this for integers/floats, not strings
     if (lhs == rhs)
     {
-        auto const two = make(bld, value_node{int_const::make(2)});
+        auto const two = make(bld, value_node{int_value::make(2)});
         return make(bld, mul_node{lhs, two});
     }
 

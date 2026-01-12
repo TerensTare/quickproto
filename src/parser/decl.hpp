@@ -484,7 +484,7 @@ inline void parser::var_body() noexcept
         auto const alloc = make(bld, alloca_node{ty});
         init = make(bld, store_node{
                              .lhs = alloc,
-                             .offset = int_const::make(0),
+                             .offset = int_value::make(0),
                              .rhs = init,
                          });
     }

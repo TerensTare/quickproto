@@ -13,6 +13,9 @@
 #include "nodegen/bit_or.hpp"
 #include "nodegen/bit_xor.hpp"
 
+#include "nodegen/shift_left.hpp"
+#include "nodegen/shift_right.hpp"
+
 #include "nodegen/logic_and.hpp"
 #include "nodegen/logic_or.hpp"
 
