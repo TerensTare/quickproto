@@ -28,6 +28,10 @@ struct sized_int_top final : sized_int_<T>
         else
             return top_value::self();
     }
+
+    inline value const *bcompl() const noexcept { return this; }
+
+    inline value const *band(value const *rhs) const noexcept { return rhs; }
 };
 
 template <std::integral T>

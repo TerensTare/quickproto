@@ -9,9 +9,11 @@
 #include "nodegen/mul.hpp"
 #include "nodegen/sub.hpp"
 
+#include "nodegen/and_xor.hpp"
 #include "nodegen/bit_and.hpp"
 #include "nodegen/bit_or.hpp"
 #include "nodegen/bit_xor.hpp"
+#include "nodegen/compl.hpp"
 
 #include "nodegen/shift_left.hpp"
 #include "nodegen/shift_right.hpp"

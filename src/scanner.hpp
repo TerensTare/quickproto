@@ -504,10 +504,18 @@ inline token_kind scanner_iter::next(hashed_name &hash) noexcept
                    : Greater;
 
     case '&':
-        return eat('&')
-                   ? AndAnd
-               : eat('=') ? AndEqual
-                          : And;
+        switch (*text.chars++)
+        {
+        case '^':
+            return AndXor;
+        case '&':
+            return AndAnd;
+        case '=':
+            return AndEqual;
+        default:
+            --text.chars;
+            return And;
+        }
 
     case '|':
         return eat('|')

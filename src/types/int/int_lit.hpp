@@ -6,6 +6,7 @@
 
 #include "types/covariant_helper.hpp"
 #include "types/float.hpp"
+#include "types/int/sized_int.hpp"
 
 // HACK: do something better
 struct invalid_cast final : value_error
@@ -27,6 +28,7 @@ struct int_value : covariant_helper<int_value>
 
     constexpr bool is_const() const noexcept final { return level == 1; }
 
+    constexpr int_value const *bcompl() const noexcept final;
     constexpr int_value const *neg() const noexcept final;
 
     constexpr int_value const *add(int_value const *rhs) const noexcept;
@@ -80,6 +82,32 @@ struct int_const final : int_value
             return new float64{(double)n};
         else if (target->as<sint_type>())
             return this;
+            // intN
+        else if (target->as<sized_int_type<int8_t>>())
+            // HACK: propagate const-ness if possible
+            return new sized_int_top<int8_t>();
+        else if (target->as<sized_int_type<int16_t>>())
+            // HACK: propagate const-ness if possible
+            return new sized_int_top<int16_t>();
+                else if (target->as<sized_int_type<int32_t>>())
+            // HACK: propagate const-ness if possible
+            return new sized_int_top<int32_t>();
+        else if (target->as<sized_int_type<int64_t>>())
+            // HACK: propagate const-ness if possible
+            return new sized_int_top<int64_t>();
+            // uintN
+        else if (target->as<sized_int_type<uint8_t>>())
+            // HACK: propagate const-ness if possible
+            return new sized_int_top<uint8_t>();
+        else if (target->as<sized_int_type<uint16_t>>())
+            // HACK: propagate const-ness if possible
+            return new sized_int_top<uint16_t>();
+                else if (target->as<sized_int_type<uint32_t>>())
+            // HACK: propagate const-ness if possible
+            return new sized_int_top<uint32_t>();
+        else if (target->as<sized_int_type<uint64_t>>())
+            // HACK: propagate const-ness if possible
+            return new sized_int_top<uint64_t>();
         else
             return new invalid_cast{this, target};
     }
@@ -219,6 +247,19 @@ constexpr value const *int_value::lt(int_value const *rhs) const noexcept
 }
 
 GENERATE_BINARY_JUMP_TABLE(int_value, int_value, phi, iphi);
+
+constexpr int_value const *int_value::bcompl() const noexcept
+{
+    switch (level)
+    {
+    case 0:
+        return int_value::top();
+    case 1:
+        return int_value::make(~static_cast<int_const const *>(this)->n);
+    case 2:
+        return int_value::bot();
+    }
+}
 
 constexpr int_value const *int_value::neg() const noexcept
 {

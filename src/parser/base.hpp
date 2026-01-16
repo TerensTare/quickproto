@@ -84,7 +84,7 @@ enum class parse_prec : uint8_t
     And,            // &&
     Comparison,     // == != < <= >= >
     Addition,       // + - | ^
-    Multiplication, // * / << >> &
+    Multiplication, // * / << >> & &^
 };
 
 static constexpr hashed_name no_name = hashed_name{(entt::id_type)entt::hashed_string::value("<no-name>")};
@@ -135,7 +135,7 @@ struct parser final
     //           | <unary_op> expr
     //           | post_expr( '(' expr ')' )
     //           | post_expr( type_expr_or_ident )
-    // <unary_op> ::= '!' | '-' | '*' | '&'
+    // <unary_op> ::= '!' | '-' | '*' | '&' | '^'
     // ^ this means that the `post_expr` recursion will apply IFF <ident> is followed by `(`, `[` or `.`
     [[nodiscard]]
     inline expr_info primary() noexcept;
@@ -165,7 +165,7 @@ struct parser final
     inline entt::entity assign(expr_info lhs) noexcept;
 
     // expr comp_op expr ';' stmt
-    // comp_op ::= '+=' | '-=' | '*=' | '/=' | '&=' | '^=' | '|='
+    // comp_op ::= '+=' | '-=' | '*=' | '/=' | '&=' | '&^=' | '^=' | '|='
     [[nodiscard]]
     inline entt::entity compound_assign(expr_info lhs) noexcept;
     // expr post_op ';' stmt

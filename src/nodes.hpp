@@ -65,6 +65,7 @@ enum class node_op : uint8_t
     Region, // Region - a merge point for multiple control flows
     Phi,    // Phi In=[regionNode, dataNode x len(regionIn)]
 
+    UnaryCompl,
     UnaryNeg,
     UnaryNot,
 

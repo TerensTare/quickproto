@@ -27,6 +27,7 @@ enum class token_kind : uint8_t
     SlashEqual, // /=
 
     And,      // &
+    AndXor,   // &^
     AndAnd,   // &&
     AndEqual, // &=
     Or,       // |

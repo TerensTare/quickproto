@@ -63,6 +63,8 @@ struct value
     virtual value const *neg() const noexcept;
     // !self
     virtual value const *bnot() const noexcept;
+    // ^self
+    virtual value const *bcompl() const noexcept;
     // *self
     virtual value const *deref() const noexcept;
     // &self
@@ -233,6 +235,7 @@ inline value const *value::div(value const *rhs) const noexcept
 
 inline value const *value::neg() const noexcept { return new unary_op_not_implemented_type{"-", this}; }
 inline value const *value::bnot() const noexcept { return new unary_op_not_implemented_type{"!", this}; }
+inline value const *value::bcompl() const noexcept { return new unary_op_not_implemented_type{"^", this}; }
 inline value const *value::deref() const noexcept { return new unary_op_not_implemented_type{"*", this}; }
 inline value const *value::addr() const noexcept { return new unary_op_not_implemented_type{"&", this}; }
 

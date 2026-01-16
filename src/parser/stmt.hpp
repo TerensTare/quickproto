@@ -77,20 +77,28 @@ inline entt::entity parser::compound_assign(expr_info lhs) noexcept
 
     // codegen
 
-    auto const opnode =
-        optok == token_kind::PlusEqual
-            ? make(bld, add_node{lhs.node, rhs})
-        : optok == token_kind::MinusEqual
-            ? make(bld, sub_node{lhs.node, rhs})
-        : optok == token_kind::StarEqual
-            ? make(bld, mul_node{lhs.node, rhs})
-        : optok == token_kind::SlashEqual
-            ? make(bld, div_node{lhs.node, rhs})
-        : optok == token_kind::AndEqual
-            ? make(bld, bit_and_node{lhs.node, rhs})
-        : optok == token_kind::XorEqual
-            ? make(bld, bit_xor_node{lhs.node, rhs})
-            : make(bld, bit_or_node{lhs.node, rhs});
+#define gen_branch(tok, node_ty) \
+    case token_kind::tok:        \
+        return make(bld, node_ty{lhs.node, rhs})
+
+    auto const opnode = [&]
+    {
+        switch (optok)
+        {
+            gen_branch(PlusEqual, add_node);
+            gen_branch(MinusEqual, sub_node);
+            gen_branch(StarEqual, mul_node);
+            gen_branch(SlashEqual, div_node);
+            gen_branch(AndEqual, bit_and_node);
+            gen_branch(XorEqual, bit_xor_node);
+            gen_branch(AndXor, and_xor_node);
+            gen_branch(OrEqual, bit_or_node);
+        default:
+            std::unreachable();
+        }
+    }();
+
+#undef gen_branch
 
     if (lhs.assign == no_name)
         fail(full_optok, "Cannot assign to expression on the left side!", ""); // TODO: say something better here

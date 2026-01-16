@@ -69,6 +69,8 @@ inline auto print_node(auto &out, entt::registry const &reg, entt::entity id) no
     case node_op::Deref:
         return named_node("Deref");
 
+    case node_op::UnaryCompl:
+        return circle_node("^");
     case node_op::UnaryNeg:
         return circle_node("-");
     case node_op::UnaryNot:

@@ -24,6 +24,7 @@ static constexpr auto prec_table = []()
     table[(uint8_t)token_kind::Star] = parse_prec::Multiplication;
     table[(uint8_t)token_kind::Slash] = parse_prec::Multiplication;
     table[(uint8_t)token_kind::And] = parse_prec::Multiplication;
+    table[(uint8_t)token_kind::AndXor] = parse_prec::Multiplication;
     table[(uint8_t)token_kind::Lshift] = parse_prec::Multiplication;
     table[(uint8_t)token_kind::Rshift] = parse_prec::Multiplication;
 
@@ -179,6 +180,7 @@ inline expr_info parser::primary() noexcept
         LeftParen, // (expr)
         Bang,
         Minus,
+        Xor,
         And,
         Star, // unary
     };
@@ -294,6 +296,17 @@ inline expr_info parser::primary() noexcept
         return {
             .node = make(bld, neg_node{.sub = sub}),
             // you cannot assign to `-expr`
+            .assign = no_name,
+        };
+    }
+
+    // '^' expr
+    case Xor:
+    {
+        auto const sub = expr().node;
+        return {
+            .node = make(bld, compl_node{.sub = sub}),
+            // you cannot assign to `^expr`
             .assign = no_name,
         };
     }
@@ -435,6 +448,10 @@ inline entt::entity parser::binary_node(token_kind kind, entt::entity lhs, entt:
         return make(bld, logic_and_node{lhs, rhs});
     case OrOr:
         return make(bld, logic_or_node{lhs, rhs});
+
+    case AndXor:
+        // HACK: do you need to make this into a separate node?
+        return make(bld, and_xor_node{lhs, rhs});
 
     case And:
         return make(bld, bit_and_node{lhs, rhs});
